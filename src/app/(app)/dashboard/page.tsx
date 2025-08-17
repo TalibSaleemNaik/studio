@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -112,59 +111,65 @@ export default function DashboardPage() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // This is a simplified workspace logic. 
   // In a real app, you'd fetch workspaces the user is a member of.
   const hardcodedWorkspaceId = 'default-workspace';
 
   useEffect(() => {
-    if (user) {
-        const checkAndCreateWorkspace = async () => {
-            const workspaceRef = doc(db, 'workspaces', hardcodedWorkspaceId);
-            try {
-                const workspaceSnap = await getDoc(workspaceRef);
-
-                if (!workspaceSnap.exists()) {
-                     await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid });
-                }
-                setWorkspaceId(hardcodedWorkspaceId);
-            } catch (error) {
-                console.error("Error checking or creating workspace:", error);
-                 // If getDoc fails, it might be due to being offline.
-                 // We can still try to set the workspace ID and let the board query handle the offline state.
-                setWorkspaceId(hardcodedWorkspaceId);
-            }
-        };
-        checkAndCreateWorkspace();
+    // Only run logic if we have a user.
+    if (!user) {
+      setLoading(true);
+      return;
     }
+
+    const setupWorkspaceAndFetchBoards = async () => {
+      try {
+        const workspaceRef = doc(db, 'workspaces', hardcodedWorkspaceId);
+        const workspaceSnap = await getDoc(workspaceRef);
+
+        if (!workspaceSnap.exists()) {
+             await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid });
+        }
+        
+        // Once workspace is confirmed, set the ID
+        setWorkspaceId(hardcodedWorkspaceId);
+        setError(null);
+      } catch (err: any) {
+        console.error("Error setting up workspace:", err);
+        setError("Could not connect to the database. Some features may not be available.");
+        // We might still be able to proceed if persistence is working, so we set the workspaceId
+        setWorkspaceId(hardcodedWorkspaceId);
+      }
+    };
+    
+    setupWorkspaceAndFetchBoards();
+
   }, [user]);
   
   useEffect(() => {
+    // This effect runs only when workspaceId is set.
     if (!workspaceId) {
-        // We are not ready to fetch boards yet.
-        // We set loading to true if we don't have a workspaceId, unless we already know we have a user.
-        // This prevents a flash of the "no boards" message.
-        if(user) {
-            setLoading(true);
-        }
-        return;
+      return;
     }
 
     setLoading(true);
     const q = query(collection(db, `workspaces/${workspaceId}/boards`));
+    
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
       setBoards(boardsData);
       setLoading(false);
-    }, (error) => {
-        console.error("Error fetching boards:", error);
-        // Even on error, we stop loading to show the UI.
-        // Firestore's offline persistence might still serve cached data.
+      setError(null);
+    }, (err: any) => {
+        console.error("Error fetching boards:", err);
+        setError("Failed to fetch boards. Please check your connection and try again.");
         setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [workspaceId, user]);
+  }, [workspaceId]);
 
   return (
     <div className="space-y-8">
@@ -190,6 +195,8 @@ export default function DashboardPage() {
                 <Skeleton className="h-48 w-full" />
                 <Skeleton className="h-48 w-full" />
              </div>
+        ) : error ? (
+            <div className="text-destructive">{error}</div>
         ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {boards.map((board) => (
