@@ -14,8 +14,8 @@ interface Board {
 
 async function getBoards(workspaceId: string): Promise<Board[]> {
     if (!workspaceId) return [];
-    const boardsQuery = query(collection(db, `workspaces/${workspaceId}/boards`));
-    const querySnapshot = await getDocs(boardsQuery);
+    const boardsQuery = db.collection(`workspaces/${workspaceId}/boards`);
+    const querySnapshot = await boardsQuery.get();
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
 }
 
@@ -30,7 +30,7 @@ async function createBoard(formData: FormData) {
     }
 
     try {
-        const boardRef = await addDoc(collection(db, `workspaces/${workspaceId}/boards`), {
+        const boardRef = await db.collection(`workspaces/${workspaceId}/boards`).add({
             name: title,
             description: description,
             createdAt: serverTimestamp(),
@@ -38,7 +38,7 @@ async function createBoard(formData: FormData) {
 
         const defaultGroups = ['To Do', 'In Progress', 'Done'];
         for (let i = 0; i < defaultGroups.length; i++) {
-            await addDoc(collection(db, `workspaces/${workspaceId}/groups`), {
+            await db.collection(`workspaces/${workspaceId}/groups`).add({
                 boardId: boardRef.id,
                 name: defaultGroups[i],
                 order: i,
@@ -66,10 +66,10 @@ export default async function DashboardPage() {
     try {
         // We add a dummy check here to ensure the page can render.
         // In a real app, you might fetch user-specific data.
-        const workspaceRef = doc(db, 'workspaces', hardcodedWorkspaceId);
-        const workspaceSnap = await getDoc(workspaceRef);
-        if (!workspaceSnap.exists()) {
-             await setDoc(workspaceRef, { name: "Default Workspace", createdAt: serverTimestamp() });
+        const workspaceRef = db.doc(`workspaces/${hardcodedWorkspaceId}`);
+        const workspaceSnap = await workspaceRef.get();
+        if (!workspaceSnap.exists) {
+             await workspaceRef.set({ name: "Default Workspace", createdAt: serverTimestamp() });
         }
     
         const boards = await getBoards(hardcodedWorkspaceId);
