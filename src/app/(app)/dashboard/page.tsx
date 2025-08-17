@@ -1,5 +1,5 @@
 
-import { collection, getDocs, query, where, doc, getDoc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, collection, getDocs, query, doc, getDoc, setDoc, addDoc, serverTimestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firebase-admin";
 import { redirect } from "next/navigation";
 import { headers } from 'next/headers';
