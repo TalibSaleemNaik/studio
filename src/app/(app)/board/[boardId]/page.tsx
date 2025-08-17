@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 
 interface Task {
@@ -28,7 +28,7 @@ interface Columns {
   [key: string]: Column;
 }
 
-function Board({ params }: { params: { boardId: string } }) {
+function Board({ boardId }: { boardId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = useState<Columns>({});
   const [loading, setLoading] = useState(true);
@@ -37,11 +37,11 @@ function Board({ params }: { params: { boardId: string } }) {
   const workspaceId = 'default-workspace';
 
   useEffect(() => {
-    if (!user || !params.boardId) return;
+    if (!user || !boardId) return;
 
     const groupsQuery = query(
       collection(db, `workspaces/${workspaceId}/groups`),
-      where('boardId', '==', params.boardId),
+      where('boardId', '==', boardId),
       orderBy('order')
     );
 
@@ -50,7 +50,7 @@ function Board({ params }: { params: { boardId: string } }) {
       
       const tasksQuery = query(
         collection(db, `workspaces/${workspaceId}/tasks`),
-        where('boardId', '==', params.boardId)
+        where('boardId', '==', boardId)
       );
 
       const unsubscribeTasks = onSnapshot(tasksQuery, (tasksSnapshot) => {
@@ -76,7 +76,7 @@ function Board({ params }: { params: { boardId: string } }) {
 
     return () => unsubscribeGroups();
 
-  }, [user, params.boardId]);
+  }, [user, boardId]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination } = result;
@@ -221,12 +221,13 @@ const DynamicBoard = dynamic(() => Promise.resolve(Board), {
 });
 
 export default function BoardPage({ params }: { params: { boardId: string } }) {
+  const { boardId } = params;
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold font-headline">Website Redesign</h1>
       </div>
-      <DynamicBoard params={params} />
+      <DynamicBoard boardId={boardId} />
     </div>
   );
 }
