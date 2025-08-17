@@ -1,15 +1,16 @@
 // This file is for server-side use only.
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, App } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
+let app: App;
 if (!getApps().length) {
-    // In a managed environment like Firebase App Hosting, the SDK can
-    // auto-discover credentials. We don't need to manually initialize.
-    initializeApp();
+    app = initializeApp();
+} else {
+    app = getApps()[0];
 }
 
-const db = getFirestore();
-const auth = getAuth();
+const db = getFirestore(app);
+const auth = getAuth(app);
 
 export { db, auth };
