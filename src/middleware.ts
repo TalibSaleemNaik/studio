@@ -7,27 +7,36 @@ export async function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get('session')?.value;
   const { pathname } = request.nextUrl;
 
-  // List of public paths that don't require authentication
+  // List of public paths that don't require authentication.
   const publicPaths = ['/login', '/signup', '/'];
 
-  // If the path is public, let the request through
+  // Let the landing page be accessible without auth.
+  if (pathname === '/') {
+    return NextResponse.next();
+  }
+  
+  // If accessing a public path, do nothing.
   if (publicPaths.includes(pathname)) {
     return NextResponse.next();
   }
 
-  // For protected routes, check for a session cookie
+  // For all other paths, proceed with authentication check.
   if (!sessionCookie) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    // If no session cookie, redirect to login, preserving the intended destination.
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url);
   }
 
   try {
     // Verify the session cookie.
     const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
     
-    // The cookie is valid, pass the user data in headers.
+    // The cookie is valid, create new headers to pass user data.
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('X-User-Session', JSON.stringify(decodedClaims));
 
+    // Continue to the requested page with the new headers.
     return NextResponse.next({
       request: {
         headers: requestHeaders,
@@ -45,18 +54,15 @@ export async function middleware(request: NextRequest) {
 
 // Apply middleware to all routes except for static assets and API routes.
 export const config = {
+  /*
+   * Match all request paths except for the ones starting with:
+   * - api (API routes)
+   * - _next/static (static files)
+   * - _next/image (image optimization files)
+   * - favicon.ico (favicon file)
+   */
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - / (the root landing page)
-     * - /login
-     * - /signup
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico|login|signup|$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
-  runtime: 'nodejs', // This is the crucial line to fix the error
+  runtime: 'nodejs',
 };

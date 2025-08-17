@@ -27,7 +27,7 @@ function AppLayout({
   if (loading || !user) {
     return (
       <div className="flex min-h-screen w-full bg-background">
-        <div className="w-64 border-r p-4">
+        <div className="w-64 border-r p-4 hidden md:block">
           <Skeleton className="h-8 w-32 mb-8" />
           <div className="space-y-4">
             <Skeleton className="h-8 w-full" />
@@ -37,10 +37,12 @@ function AppLayout({
         <div className="flex-1">
           <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
             <Skeleton className="h-8 w-8 rounded-full md:hidden" />
-            <Skeleton className="h-8 w-8 rounded-full ml-auto" />
+            <div className="ml-auto">
+                <Skeleton className="h-8 w-8 rounded-full" />
+            </div>
           </header>
           <main className="flex-1 p-4 sm:p-6 md:p-8">
-            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-96 w-full" />
           </main>
         </div>
       </div>
@@ -64,7 +66,9 @@ function AppLayout({
         <div className="flex flex-col flex-1">
           <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
               <SidebarTrigger />
-              <UserNav />
+              <div className="ml-auto">
+                <UserNav />
+              </div>
           </header>
           <main className="flex-1 p-4 sm:p-6 md:p-8 bg-muted/30">
             {children}
