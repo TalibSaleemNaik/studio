@@ -27,8 +27,8 @@ function AppLayout({
   if (loading || !user) {
     return (
       <div className="flex min-h-screen w-full bg-background">
-        <div className="w-64 border-r p-4 hidden md:block">
-          <Skeleton className="h-8 w-32 mb-8" />
+        <div className="hidden w-64 border-r p-4 md:block">
+          <Skeleton className="mb-8 h-8 w-32" />
           <div className="space-y-4">
             <Skeleton className="h-8 w-full" />
             <Skeleton className="h-8 w-full" />
@@ -51,11 +51,11 @@ function AppLayout({
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen w-full bg-background text-foreground flex">
+      <div className="flex min-h-screen w-full bg-background text-foreground">
         <Sidebar className="border-r">
           <SidebarHeader>
             <Link href="/dashboard" className="flex items-center gap-2" prefetch={false}>
-              <StreamlineLogo className="w-6 h-6 text-primary" />
+              <StreamlineLogo className="h-6 w-6 text-primary" />
               <h1 className="font-headline text-xl font-semibold">Streamline</h1>
             </Link>
           </SidebarHeader>
@@ -63,14 +63,14 @@ function AppLayout({
             <MainNav />
           </SidebarContent>
         </Sidebar>
-        <div className="flex flex-col flex-1">
+        <div className="flex flex-1 flex-col">
           <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
               <SidebarTrigger />
               <div className="ml-auto">
                 <UserNav />
               </div>
           </header>
-          <main className="flex-1 p-4 sm:p-6 md:p-8 bg-muted/30">
+          <main className="flex-1 bg-muted/30 p-4 sm:p-6 md:p-8">
             {children}
           </main>
         </div>
