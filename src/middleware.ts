@@ -1,17 +1,19 @@
+
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   
-  // Example of getting user from a cookie
-  // In a real app, you would verify a session token here
+  // Get user from the 'user-session' cookie
   const userCookie = request.cookies.get('user-session')?.value;
   
+  // If the cookie exists, forward its value in a request header
   if (userCookie) {
     requestHeaders.set('X-User-Session', userCookie);
   }
 
+  // Return the request with the new headers
   return NextResponse.next({
     request: {
       headers: requestHeaders,
@@ -19,6 +21,7 @@ export function middleware(request: NextRequest) {
   })
 }
 
+// Run middleware on all dashboard routes
 export const config = {
-  matcher: '/dashboard/:path*', // Run middleware on dashboard routes
+  matcher: '/dashboard/:path*',
 }

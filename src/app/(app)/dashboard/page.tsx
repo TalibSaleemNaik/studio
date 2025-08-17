@@ -1,9 +1,8 @@
+
 import { collection, getDocs, query, where, doc, getDoc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase-admin"; // Switch to admin SDK for server-side
+import { db } from "@/lib/firebase-admin";
 import { redirect } from "next/navigation";
 import { headers } from 'next/headers';
-import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
 import { DashboardClient } from "@/components/dashboard-client";
 
 interface Board {
@@ -45,17 +44,15 @@ async function createBoard(formData: FormData) {
                 order: i,
             });
         }
-        // This will trigger a re-render of the page with the new board
-        // No need for client-side state updates
     } catch (error) {
         console.error("Failed to create board:", error);
-        // Handle error appropriately
+        // Rethrow or handle error as needed
+        throw new Error("Failed to create the new board.");
     }
 }
 
 
 export default async function DashboardPage() {
-    // This is a Server Component, so we fetch data here
     const headersList = headers();
     const userSession = headersList.get('X-User-Session');
     
@@ -66,12 +63,13 @@ export default async function DashboardPage() {
     let user;
     try {
         user = JSON.parse(userSession);
+        // Add a check for a valid user object with an email
+        if (!user || !user.uid || !user.email) {
+            console.error("Invalid user session data:", user);
+            redirect('/login');
+        }
     } catch (e) {
         console.error("Failed to parse user session:", e);
-        redirect('/login');
-    }
-
-    if (!user || !user.uid) {
         redirect('/login');
     }
 
@@ -81,9 +79,11 @@ export default async function DashboardPage() {
     try {
         const workspaceSnap = await getDoc(workspaceRef);
         if (!workspaceSnap.exists()) {
-            await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid });
+            // Create a default workspace if it doesn't exist for the user.
+            await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid, createdAt: serverTimestamp() });
         }
     
+        // Now that workspace is guaranteed to exist, fetch boards.
         const boards = await getBoards(hardcodedWorkspaceId);
     
         return (
@@ -109,7 +109,7 @@ export default async function DashboardPage() {
         return (
              <div className="flex items-center justify-center h-full">
                 <div className="text-destructive text-center p-4 bg-destructive/10 rounded-md">
-                    Could not load dashboard. Please try again later.
+                    Could not load dashboard. Please check your connection and try again.
                 </div>
             </div>
         )
