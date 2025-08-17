@@ -38,28 +38,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setLoading(true); // Start loading state
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         // User is signed in.
-        setUser(firebaseUser);
-        
-        // IMPORTANT: Ensure firebaseUser object, especially email, is fully populated before setting the cookie.
-        if (firebaseUser.uid && firebaseUser.email) {
-          const userData = JSON.stringify({ 
-            uid: firebaseUser.uid, 
-            email: firebaseUser.email, 
-            displayName: firebaseUser.displayName, 
-            photoURL: firebaseUser.photoURL 
-          });
-          setCookie('user-session', userData, 7);
+        // Wait for the ID token to ensure all user data is available.
+        try {
+            await firebaseUser.getIdToken(true); // Force refresh
+            const userData = JSON.stringify({ 
+                uid: firebaseUser.uid, 
+                email: firebaseUser.email, 
+                displayName: firebaseUser.displayName, 
+                photoURL: firebaseUser.photoURL 
+            });
+            setCookie('user-session', userData, 7);
+            setUser(firebaseUser);
+        } catch (error) {
+            console.error("Error getting user token:", error);
+            setUser(null);
+            eraseCookie('user-session');
         }
+
       } else {
         // User is signed out.
         setUser(null);
         eraseCookie('user-session');
       }
-      setLoading(false); // End loading state
+      setLoading(false);
     });
 
     // Cleanup subscription on unmount
