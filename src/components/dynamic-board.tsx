@@ -245,42 +245,40 @@ function Board({ boardId }: { boardId: string }) {
                   <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
                   <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
                 </div>
-                <div className="flex-1 flex flex-col min-h-0">
-                  <div className="flex-1 space-y-4 overflow-y-auto pr-2 -mr-2">
-                    {column.items.map((item, index) => (
-                      <Draggable key={item.id} draggableId={item.id} index={index}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={cn(
-                              "bg-card p-4 rounded-lg shadow-sm border flex items-start gap-3 transition-shadow",
-                              snapshot.isDragging && "shadow-lg"
-                            )}
-                            style={{
-                              ...provided.draggableProps.style
-                            }}
-                          >
-                            <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab" />
-                            <div className="flex-1">
-                              <p className="font-medium">{item.content}</p>
-                            </div>
+                <div className="flex-1 space-y-4 overflow-y-auto pr-2 -mr-2 min-h-0">
+                  {column.items.map((item, index) => (
+                    <Draggable key={item.id} draggableId={item.id} index={index}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          className={cn(
+                            "bg-card p-4 rounded-lg shadow-sm border flex items-start gap-3 transition-shadow",
+                            snapshot.isDragging && "shadow-lg"
+                          )}
+                          style={{
+                            ...provided.draggableProps.style
+                          }}
+                        >
+                          <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab" />
+                          <div className="flex-1">
+                            <p className="font-medium">{item.content}</p>
                           </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-
-                  <CreateTaskDialog 
-                      workspaceId={workspaceId} 
-                      boardId={boardId} 
-                      groupId={columnId}
-                      columnItemCount={column.items.length}
-                      onTaskCreated={() => {}}
-                  />
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
                 </div>
+
+                <CreateTaskDialog 
+                    workspaceId={workspaceId} 
+                    boardId={boardId} 
+                    groupId={columnId}
+                    columnItemCount={column.items.length}
+                    onTaskCreated={() => {}}
+                />
               </div>
             )}
           </Droppable>
