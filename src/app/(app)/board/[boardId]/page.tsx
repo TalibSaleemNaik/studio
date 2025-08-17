@@ -1,20 +1,25 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { GripVertical, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { db } from '@/lib/firebase';
+import { collection, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth';
 
 interface Task {
   id: string;
   content: string;
+  order: number;
 }
 
 interface Column {
+  id: string;
   name: string;
   items: Task[];
 }
@@ -23,84 +28,117 @@ interface Columns {
   [key: string]: Column;
 }
 
-const initialColumns: Columns = {
-  'todo': {
-    name: 'To Do',
-    items: [
-      { id: 'task-1', content: 'Design landing page' },
-      { id: 'task-2', content: 'Develop API endpoints' },
-      { id: 'task-3', content: 'Create marketing materials' },
-    ],
-  },
-  'in-progress': {
-    name: 'In Progress',
-    items: [
-      { id: 'task-4', content: 'Implement user authentication' },
-      { id: 'task-5', content: 'Build dashboard components' },
-    ],
-  },
-  'done': {
-    name: 'Done',
-    items: [
-      { id: 'task-6', content: 'Setup database schema' },
-      { id: 'task-7', content: 'Configure CI/CD pipeline' },
-    ],
-  },
-};
+function Board({ params }: { params: { boardId: string } }) {
+  const { user } = useAuth();
+  const [columns, setColumns] = useState<Columns>({});
+  const [loading, setLoading] = useState(true);
 
-function Board({ initialColumns }: { initialColumns: Columns }) {
-  const [columns, setColumns] = React.useState<Columns>(initialColumns);
+  // Hardcoded workspaceId for now. This should come from user context or props.
+  const workspaceId = 'default-workspace';
 
-  const onDragEnd = (result: DropResult) => {
+  useEffect(() => {
+    if (!user || !params.boardId) return;
+
+    const groupsQuery = query(
+      collection(db, `workspaces/${workspaceId}/groups`),
+      where('boardId', '==', params.boardId),
+      orderBy('order')
+    );
+
+    const unsubscribeGroups = onSnapshot(groupsQuery, async (querySnapshot) => {
+      const groupsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
+      
+      const tasksQuery = query(
+        collection(db, `workspaces/${workspaceId}/tasks`),
+        where('boardId', '==', params.boardId)
+      );
+
+      const unsubscribeTasks = onSnapshot(tasksQuery, (tasksSnapshot) => {
+        const tasksData = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { content: string; groupId: string; order: number } }));
+
+        const newColumns: Columns = {};
+        for (const group of groupsData) {
+          newColumns[group.id] = {
+            id: group.id,
+            name: group.name,
+            items: tasksData
+              .filter(task => task.groupId === group.id)
+              .sort((a, b) => a.order - b.order),
+          };
+        }
+
+        setColumns(newColumns);
+        setLoading(false);
+      });
+
+      return () => unsubscribeTasks();
+    });
+
+    return () => unsubscribeGroups();
+
+  }, [user, params.boardId]);
+
+  const onDragEnd = async (result: DropResult) => {
     const { source, destination } = result;
 
-    if (!destination) {
-      return;
-    }
+    if (!destination) return;
+    
+    const sourceColId = source.droppableId;
+    const destColId = destination.droppableId;
 
-    if (source.droppableId === destination.droppableId && source.index === destination.index) {
-      return;
-    }
+    const startColumn = columns[sourceColId];
+    const endColumn = columns[destColId];
+    
+    const sourceItems = [...startColumn.items];
+    const [removed] = sourceItems.splice(source.index, 1);
 
-    const startColumn = columns[source.droppableId];
-    const endColumn = columns[destination.droppableId];
+    // Update local state immediately for better UX
+    const newColumns = { ...columns };
 
-    if (startColumn === endColumn) {
-      const newItems = Array.from(startColumn.items);
-      const [removed] = newItems.splice(source.index, 1);
-      newItems.splice(destination.index, 0, removed);
-
-      const newColumn = {
+    if (sourceColId === destColId) {
+      // Moving within the same column
+      sourceItems.splice(destination.index, 0, removed);
+      newColumns[sourceColId] = {
         ...startColumn,
-        items: newItems,
+        items: sourceItems
       };
+      setColumns(newColumns);
+      
+      // Update order in Firestore
+      for (let i = 0; i < sourceItems.length; i++) {
+        await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, sourceItems[i].id), { order: i });
+      }
 
-      setColumns({
-        ...columns,
-        [source.droppableId]: newColumn,
-      });
     } else {
-      const startItems = Array.from(startColumn.items);
-      const [removed] = startItems.splice(source.index, 1);
-      const newStartColumn = {
-        ...startColumn,
-        items: startItems,
-      };
+      // Moving to a different column
+      const destItems = [...endColumn.items];
+      destItems.splice(destination.index, 0, removed);
+      
+      newColumns[sourceColId] = { ...startColumn, items: sourceItems };
+      newColumns[destColId] = { ...endColumn, items: destItems };
+      setColumns(newColumns);
 
-      const endItems = Array.from(endColumn.items);
-      endItems.splice(destination.index, 0, removed);
-      const newEndColumn = {
-        ...endColumn,
-        items: endItems,
-      };
-
-      setColumns({
-        ...columns,
-        [source.droppableId]: newStartColumn,
-        [destination.droppableId]: newEndColumn,
+      // Update groupId and order for the moved task
+      await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, removed.id), {
+        groupId: destColId,
+        status: endColumn.name,
       });
+
+      // Update order in source column
+      for (let i = 0; i < sourceItems.length; i++) {
+        await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, sourceItems[i].id), { order: i });
+      }
+
+      // Update order in destination column
+       for (let i = 0; i < destItems.length; i++) {
+        await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, destItems[i].id), { order: i });
+      }
     }
   };
+
+  if (loading) {
+    return <BoardSkeleton />;
+  }
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
@@ -161,16 +199,15 @@ function Board({ initialColumns }: { initialColumns: Columns }) {
 function BoardSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">
-      {Object.entries(initialColumns).map(([columnId, column]) => (
-        <div key={columnId} className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
+      {['To Do', 'In Progress', 'Done'].map((name) => (
+        <div key={name} className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
-            <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
+            <h2 className="text-lg font-semibold text-foreground/90">{name}</h2>
           </div>
           <div className="space-y-4 flex-1 overflow-y-auto">
-            {column.items.map((item) => (
-              <Skeleton key={item.id} className="h-20 w-full" />
-            ))}
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
           </div>
         </div>
       ))}
@@ -189,7 +226,7 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold font-headline">Website Redesign</h1>
       </div>
-      <DynamicBoard initialColumns={initialColumns} />
+      <DynamicBoard params={params} />
     </div>
   );
 }
