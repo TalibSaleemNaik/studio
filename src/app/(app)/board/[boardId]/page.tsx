@@ -7,6 +7,7 @@ import { GripVertical, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 interface Task {
   id: string;
@@ -165,8 +166,4 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
       </DragDropContext>
     </div>
   );
-}
-
-function cn(...classes: string[]) {
-    return classes.filter(Boolean).join(' ');
 }
