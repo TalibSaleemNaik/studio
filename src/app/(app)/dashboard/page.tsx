@@ -18,7 +18,6 @@ async function getBoards(workspaceId: string): Promise<Board[]> {
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
 }
 
-// A server action to handle board creation
 async function createBoard(formData: FormData) {
     'use server';
     const title = formData.get('title') as string;
@@ -46,7 +45,6 @@ async function createBoard(formData: FormData) {
         }
     } catch (error) {
         console.error("Failed to create board:", error);
-        // Rethrow or handle error as needed
         throw new Error("Failed to create the new board.");
     }
 }
@@ -63,7 +61,6 @@ export default async function DashboardPage() {
     let user;
     try {
         user = JSON.parse(userSession);
-        // Add a check for a valid user object with an email
         if (!user || !user.uid || !user.email) {
             console.error("Invalid user session data:", user);
             redirect('/login');
@@ -79,11 +76,9 @@ export default async function DashboardPage() {
     try {
         const workspaceSnap = await getDoc(workspaceRef);
         if (!workspaceSnap.exists()) {
-            // Create a default workspace if it doesn't exist for the user.
             await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid, createdAt: serverTimestamp() });
         }
     
-        // Now that workspace is guaranteed to exist, fetch boards.
         const boards = await getBoards(hardcodedWorkspaceId);
     
         return (

@@ -1,27 +1,37 @@
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { auth } from '@/lib/firebase-admin';
 
-export function middleware(request: NextRequest) {
-  const requestHeaders = new Headers(request.headers)
-  
-  // Get user from the 'user-session' cookie
-  const userCookie = request.cookies.get('user-session')?.value;
-  
-  // If the cookie exists, forward its value in a request header
-  if (userCookie) {
-    requestHeaders.set('X-User-Session', userCookie);
+export async function middleware(request: NextRequest) {
+  const sessionCookie = request.cookies.get('session')?.value;
+
+  if (!sessionCookie) {
+    if (request.nextUrl.pathname.startsWith('/dashboard')) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    return NextResponse.next();
   }
 
-  // Return the request with the new headers
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  })
+  try {
+    const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('X-User-Session', JSON.stringify(decodedClaims));
+
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  } catch (error) {
+    // Session cookie is invalid. Clear it and redirect to login.
+    const response = NextResponse.redirect(new URL('/login', request.url));
+    response.cookies.delete('session');
+    return response;
+  }
 }
 
-// Run middleware on all dashboard routes
+// Protect all routes under /dashboard
 export const config = {
-  matcher: '/dashboard/:path*',
+  matcher: ['/dashboard/:path*'],
 }
