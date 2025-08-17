@@ -1,13 +1,14 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { GripVertical, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Task {
   id: string;
@@ -50,6 +51,11 @@ const initialColumns: Columns = {
 
 export default function BoardPage({ params }: { params: { boardId: string } }) {
   const [columns, setColumns] = useState<Columns>(initialColumns);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const onDragEnd = (result: DropResult) => {
     const { source, destination } = result;
@@ -112,58 +118,76 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
         {/* Add board-level actions here, e.g., filter, sort, etc. */}
       </div>
 
-      <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">
-          {Object.entries(columns).map(([columnId, column]) => (
-            <Droppable key={columnId} droppableId={columnId}>
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={cn(
-                    "bg-muted/60 rounded-xl p-4 h-full flex flex-col transition-colors",
-                    snapshot.isDraggingOver && "bg-primary/10"
-                  )}
-                >
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
-                    <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
-                  </div>
-                  <div className="space-y-4 flex-1 overflow-y-auto">
-                    {column.items.map((item, index) => (
-                      <Draggable key={item.id} draggableId={item.id} index={index}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={cn(
-                                "bg-card p-4 rounded-lg shadow-sm border flex items-start gap-3 transition-shadow",
-                                snapshot.isDragging && "shadow-lg"
-                            )}
-                            style={{
-                                ...provided.draggableProps.style
-                            }}
-                          >
-                            <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab" />
-                            <div className="flex-1">
-                              <p className="font-medium">{item.content}</p>
+      {isClient ? (
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">
+            {Object.entries(columns).map(([columnId, column]) => (
+              <Droppable key={columnId} droppableId={columnId}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={cn(
+                      "bg-muted/60 rounded-xl p-4 h-full flex flex-col transition-colors",
+                      snapshot.isDraggingOver && "bg-primary/10"
+                    )}
+                  >
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
+                      <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
+                    </div>
+                    <div className="space-y-4 flex-1 overflow-y-auto">
+                      {column.items.map((item, index) => (
+                        <Draggable key={item.id} draggableId={item.id} index={index}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={cn(
+                                  "bg-card p-4 rounded-lg shadow-sm border flex items-start gap-3 transition-shadow",
+                                  snapshot.isDragging && "shadow-lg"
+                              )}
+                              style={{
+                                  ...provided.draggableProps.style
+                              }}
+                            >
+                              <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab" />
+                              <div className="flex-1">
+                                <p className="font-medium">{item.content}</p>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                     <Button variant="ghost" className="w-full mt-4 justify-start">
+                        <Plus className="mr-2 h-4 w-4" /> Add Task
+                      </Button>
                   </div>
-                   <Button variant="ghost" className="w-full mt-4 justify-start">
-                      <Plus className="mr-2 h-4 w-4" /> Add Task
-                    </Button>
-                </div>
-              )}
-            </Droppable>
+                )}
+              </Droppable>
+            ))}
+          </div>
+        </DragDropContext>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">
+          {Object.entries(initialColumns).map(([columnId, column]) => (
+            <div key={columnId} className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
+                <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
+              </div>
+              <div className="space-y-4 flex-1 overflow-y-auto">
+                {column.items.map((item) => (
+                  <Skeleton key={item.id} className="h-20 w-full" />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
-      </DragDropContext>
+      )}
     </div>
   );
 }
