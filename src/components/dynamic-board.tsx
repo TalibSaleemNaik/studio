@@ -4,13 +4,17 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus } from 'lucide-react';
+import { GripVertical, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 
 interface Task {
   id: string;
@@ -27,6 +31,74 @@ interface Column {
 interface Columns {
   [key: string]: Column;
 }
+
+function CreateTaskDialog({ workspaceId, boardId, groupId, onTaskCreated }: { workspaceId: string, boardId: string, groupId: string, onTaskCreated: () => void }) {
+    const [content, setContent] = useState('');
+    const [isCreating, setIsCreating] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
+    const { toast } = useToast();
+
+    const handleCreateTask = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!content.trim()) {
+            toast({ variant: 'destructive', title: 'Task content cannot be empty' });
+            return;
+        }
+        setIsCreating(true);
+        try {
+            await addDoc(collection(db, `workspaces/${workspaceId}/tasks`), {
+                boardId: boardId,
+                groupId: groupId,
+                content: content,
+                order: 0, // Simplified: Add to top. A real app might need more complex order management.
+                createdAt: serverTimestamp(),
+            });
+
+            toast({ title: "Task created successfully!" });
+            setContent('');
+            setIsOpen(false);
+            onTaskCreated();
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Failed to create task", description: error.message });
+        } finally {
+            setIsCreating(false);
+        }
+    };
+    
+    return (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                 <Button variant="ghost" className="w-full mt-4 justify-start">
+                  <Plus className="mr-2 h-4 w-4" /> Add Task
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+                <form onSubmit={handleCreateTask}>
+                    <DialogHeader>
+                        <DialogTitle>Create New Task</DialogTitle>
+                        <DialogDescription>
+                            Add a new task to this column.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="content" className="text-right">
+                                Task
+                            </Label>
+                            <Textarea id="content" value={content} onChange={(e) => setContent(e.target.value)} placeholder="e.g. Design the login page" className="col-span-3" disabled={isCreating} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit" disabled={isCreating}>
+                            {isCreating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</> : 'Create Task'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 
 function Board({ boardId }: { boardId: string }) {
   const { user } = useAuth();
@@ -69,9 +141,15 @@ function Board({ boardId }: { boardId: string }) {
 
         setColumns(newColumns);
         setLoading(false);
+      }, (error) => {
+        console.error("Error fetching tasks:", error);
+        setLoading(false);
       });
 
       return () => unsubscribeTasks();
+    }, (error) => {
+        console.error("Error fetching groups:", error);
+        setLoading(false);
     });
 
     return () => unsubscribeGroups();
@@ -121,7 +199,7 @@ function Board({ boardId }: { boardId: string }) {
       // Update groupId and order for the moved task
       await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, removed.id), {
         groupId: destColId,
-        status: endColumn.name,
+        status: endColumn.name, // Assuming column name maps to status
       });
 
       // Update order in source column
@@ -142,7 +220,7 @@ function Board({ boardId }: { boardId: string }) {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6 items-start h-full">
         {Object.entries(columns).map(([columnId, column]) => (
           <Droppable key={columnId} droppableId={columnId}>
             {(provided, snapshot) => (
@@ -184,9 +262,12 @@ function Board({ boardId }: { boardId: string }) {
                   ))}
                   {provided.placeholder}
                 </div>
-                <Button variant="ghost" className="w-full mt-4 justify-start">
-                  <Plus className="mr-2 h-4 w-4" /> Add Task
-                </Button>
+                <CreateTaskDialog 
+                    workspaceId={workspaceId} 
+                    boardId={boardId} 
+                    groupId={columnId}
+                    onTaskCreated={() => {}}
+                />
               </div>
             )}
           </Droppable>
@@ -198,7 +279,7 @@ function Board({ boardId }: { boardId: string }) {
 
 function BoardSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start h-full">
+    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6 items-start h-full">
       {['To Do', 'In Progress', 'Done'].map((name) => (
         <div key={name} className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
           <div className="flex justify-between items-center mb-4">
