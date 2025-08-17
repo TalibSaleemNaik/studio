@@ -32,7 +32,7 @@ interface Columns {
   [key: string]: Column;
 }
 
-function CreateTaskDialog({ workspaceId, boardId, groupId, onTaskCreated }: { workspaceId: string, boardId: string, groupId: string, onTaskCreated: () => void }) {
+function CreateTaskDialog({ workspaceId, boardId, groupId, onTaskCreated, columnItemCount }: { workspaceId: string, boardId: string, groupId: string, onTaskCreated: () => void, columnItemCount: number }) {
     const [content, setContent] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
@@ -50,7 +50,7 @@ function CreateTaskDialog({ workspaceId, boardId, groupId, onTaskCreated }: { wo
                 boardId: boardId,
                 groupId: groupId,
                 content: content,
-                order: 0, // Simplified: Add to top. A real app might need more complex order management.
+                order: columnItemCount, // Add to the bottom of the list
                 createdAt: serverTimestamp(),
             });
 
@@ -109,7 +109,14 @@ function Board({ boardId }: { boardId: string }) {
   const workspaceId = 'default-workspace';
 
   useEffect(() => {
-    if (!user || !boardId) return;
+    // Wait until we have a user and a boardId.
+    if (!user || !boardId || !workspaceId) {
+        // Keep showing loader if we are not ready
+        setLoading(true);
+        return;
+    }
+
+    setLoading(true);
 
     const groupsQuery = query(
       collection(db, `workspaces/${workspaceId}/groups`),
@@ -117,7 +124,7 @@ function Board({ boardId }: { boardId: string }) {
       orderBy('order')
     );
 
-    const unsubscribeGroups = onSnapshot(groupsQuery, async (querySnapshot) => {
+    const unsubscribeGroups = onSnapshot(groupsQuery, (querySnapshot) => {
       const groupsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
       
       const tasksQuery = query(
@@ -154,7 +161,7 @@ function Board({ boardId }: { boardId: string }) {
 
     return () => unsubscribeGroups();
 
-  }, [user, boardId]);
+  }, [user, boardId, workspaceId]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination } = result;
@@ -166,6 +173,8 @@ function Board({ boardId }: { boardId: string }) {
 
     const startColumn = columns[sourceColId];
     const endColumn = columns[destColId];
+    
+    if (!startColumn || !endColumn) return;
     
     const sourceItems = [...startColumn.items];
     const [removed] = sourceItems.splice(source.index, 1);
@@ -199,7 +208,7 @@ function Board({ boardId }: { boardId: string }) {
       // Update groupId and order for the moved task
       await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, removed.id), {
         groupId: destColId,
-        status: endColumn.name, // Assuming column name maps to status
+        order: destination.index, 
       });
 
       // Update order in source column
@@ -266,6 +275,7 @@ function Board({ boardId }: { boardId: string }) {
                     workspaceId={workspaceId} 
                     boardId={boardId} 
                     groupId={columnId}
+                    columnItemCount={column.items.length}
                     onTaskCreated={() => {}}
                 />
               </div>
