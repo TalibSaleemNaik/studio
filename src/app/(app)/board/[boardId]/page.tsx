@@ -1,12 +1,10 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { GripVertical, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -50,10 +48,10 @@ const initialColumns: Columns = {
 };
 
 export default function BoardPage({ params }: { params: { boardId: string } }) {
-  const [columns, setColumns] = useState<Columns>(initialColumns);
-  const [isClient, setIsClient] = useState(false);
+  const [columns, setColumns] = React.useState<Columns>(initialColumns);
+  const [isClient, setIsClient] = React.useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
     setIsClient(true);
   }, []);
 
