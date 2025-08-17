@@ -245,7 +245,7 @@ function Board({ boardId }: { boardId: string }) {
                   <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
                   <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
                 </div>
-                <div className="space-y-4 flex-1 overflow-y-auto">
+                <div className="flex-1 space-y-4 overflow-y-auto">
                   {column.items.map((item, index) => (
                     <Draggable key={item.id} draggableId={item.id} index={index}>
                       {(provided, snapshot) => (
