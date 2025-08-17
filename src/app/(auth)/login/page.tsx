@@ -37,6 +37,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    setLoading(true);
     try {
       await signInWithPopup(auth, provider);
       router.push('/dashboard');
@@ -46,6 +47,8 @@ export default function LoginPage() {
         title: "Google Login Failed",
         description: error.message,
       });
+    } finally {
+        setLoading(false);
     }
   };
 

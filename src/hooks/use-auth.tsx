@@ -82,10 +82,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       router.push('/login');
     }
     
-    // If user is logged in and on an auth page, redirect to dashboard.
-    if (user && isAuthPage) {
-      router.push('/dashboard');
-    }
+    // NOTE: We no longer redirect if the user is on an auth page.
+    // This is handled by the login/signup pages themselves after a successful action.
 
   }, [user, loading, pathname, router]);
 

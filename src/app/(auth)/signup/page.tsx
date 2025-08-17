@@ -51,6 +51,7 @@ export default function SignupPage() {
 
   const handleGoogleSignup = async () => {
     const provider = new GoogleAuthProvider();
+    setLoading(true);
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
@@ -70,6 +71,8 @@ export default function SignupPage() {
         title: "Google Sign-up Failed",
         description: error.message,
       });
+    } finally {
+        setLoading(false);
     }
   };
 
