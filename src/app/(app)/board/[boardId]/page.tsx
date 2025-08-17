@@ -2,6 +2,7 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { GripVertical, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -177,22 +178,18 @@ function BoardSkeleton() {
   )
 }
 
+const DynamicBoard = dynamic(() => Promise.resolve(Board), {
+  ssr: false,
+  loading: () => <BoardSkeleton />,
+});
 
 export default function BoardPage({ params }: { params: { boardId: string } }) {
-  const [isClient, setIsClient] = React.useState(false);
-
-  React.useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold font-headline">Website Redesign</h1>
       </div>
-
-      {isClient ? <Board initialColumns={initialColumns} /> : <BoardSkeleton />}
+      <DynamicBoard initialColumns={initialColumns} />
     </div>
   );
 }
