@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -112,20 +113,23 @@ export default function DashboardPage() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  // This is a simplified workspace logic. 
-  // In a real app, you'd fetch workspaces the user is a member of.
   const hardcodedWorkspaceId = 'default-workspace';
 
   useEffect(() => {
-    // Only run logic if we have a user.
     if (!user) {
-      setLoading(true);
+      setLoading(true); // Keep loading if no user
       return;
     }
 
-    const setupWorkspaceAndFetchBoards = async () => {
+    // This function will run once we have a user.
+    const setupAndFetchData = async () => {
       try {
+        setLoading(true);
+        setError(null);
+        
+        // 1. Ensure workspace exists
         const workspaceRef = doc(db, 'workspaces', hardcodedWorkspaceId);
         const workspaceSnap = await getDoc(workspaceRef);
 
@@ -133,43 +137,43 @@ export default function DashboardPage() {
              await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid });
         }
         
-        // Once workspace is confirmed, set the ID
+        // 2. Set the workspace ID
         setWorkspaceId(hardcodedWorkspaceId);
-        setError(null);
+        
+        // 3. Now, fetch the boards using the confirmed workspaceId
+        const q = query(collection(db, `workspaces/${hardcodedWorkspaceId}/boards`));
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+          const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+          setBoards(boardsData);
+          setLoading(false);
+        }, (err: any) => {
+            console.error("Error fetching boards:", err);
+            setError("Failed to fetch boards. Please check your connection and try again.");
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
       } catch (err: any) {
         console.error("Error setting up workspace:", err);
         setError("Could not connect to the database. Some features may not be available.");
-        // We might still be able to proceed if persistence is working, so we set the workspaceId
-        setWorkspaceId(hardcodedWorkspaceId);
+        toast({ variant: 'destructive', title: 'Connection Error', description: err.message });
+        setLoading(false);
       }
     };
     
-    setupWorkspaceAndFetchBoards();
+    const unsubscribePromise = setupAndFetchData();
 
-  }, [user]);
-  
-  useEffect(() => {
-    // This effect runs only when workspaceId is set.
-    if (!workspaceId) {
-      return;
+    return () => {
+        unsubscribePromise.then(unsubscribe => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        });
     }
 
-    setLoading(true);
-    const q = query(collection(db, `workspaces/${workspaceId}/boards`));
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
-      setBoards(boardsData);
-      setLoading(false);
-      setError(null);
-    }, (err: any) => {
-        console.error("Error fetching boards:", err);
-        setError("Failed to fetch boards. Please check your connection and try again.");
-        setLoading(false);
-    });
+  }, [user, toast]);
 
-    return () => unsubscribe();
-  }, [workspaceId]);
 
   return (
     <div className="space-y-8">
