@@ -13,6 +13,7 @@ interface Board {
 }
 
 async function getBoards(workspaceId: string): Promise<Board[]> {
+    if (!workspaceId) return [];
     const boardsQuery = query(collection(db, `workspaces/${workspaceId}/boards`));
     const querySnapshot = await getDocs(boardsQuery);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
@@ -62,7 +63,17 @@ export default async function DashboardPage() {
         redirect('/login');
     }
     
-    const user = JSON.parse(userSession);
+    let user;
+    try {
+        user = JSON.parse(userSession);
+    } catch (e) {
+        console.error("Failed to parse user session:", e);
+        redirect('/login');
+    }
+
+    if (!user || !user.uid) {
+        redirect('/login');
+    }
 
     const hardcodedWorkspaceId = 'default-workspace';
     const workspaceRef = doc(db, 'workspaces', hardcodedWorkspaceId);
@@ -79,7 +90,7 @@ export default async function DashboardPage() {
             <div className="space-y-8">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-headline font-bold">Dashboard</h1>
+                        <h1 className="font-headline text-3xl font-bold">Dashboard</h1>
                         <p className="text-muted-foreground">An overview of your projects and workspaces.</p>
                     </div>
                 </div>

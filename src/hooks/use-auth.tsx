@@ -40,8 +40,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       
       // When auth state changes, update the cookie for server components
+      // Ensure email is not null or empty before setting the cookie.
       if (user && user.uid && user.email) {
-        const userData = JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL });
+        const userData = JSON.stringify({ 
+          uid: user.uid, 
+          email: user.email, 
+          displayName: user.displayName, 
+          photoURL: user.photoURL 
+        });
         setCookie('user-session', userData, 7);
       } else {
         eraseCookie('user-session');
