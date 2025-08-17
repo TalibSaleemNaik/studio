@@ -123,46 +123,42 @@ export default function DashboardPage() {
       return;
     }
 
-    // This function will run once we have a user.
-    const setupAndFetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // 1. Ensure workspace exists
-        const workspaceRef = doc(db, 'workspaces', hardcodedWorkspaceId);
-        const workspaceSnap = await getDoc(workspaceRef);
+    const workspaceRef = doc(db, 'workspaces', hardcodedWorkspaceId);
 
-        if (!workspaceSnap.exists()) {
-             await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid });
-        }
-        
-        // 2. Set the workspace ID
-        setWorkspaceId(hardcodedWorkspaceId);
-        
-        // 3. Now, fetch the boards using the confirmed workspaceId
-        const q = query(collection(db, `workspaces/${hardcodedWorkspaceId}/boards`));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-          const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
-          setBoards(boardsData);
-          setLoading(false);
-        }, (err: any) => {
-            console.error("Error fetching boards:", err);
-            setError("Failed to fetch boards. Please check your connection and try again.");
-            toast({ variant: 'destructive', title: 'Error', description: err.message });
+    const setupAndFetch = async () => {
+        try {
+            const workspaceSnap = await getDoc(workspaceRef);
+            if (!workspaceSnap.exists()) {
+                await setDoc(workspaceRef, { name: "Default Workspace", ownerId: user.uid });
+            }
+            setWorkspaceId(hardcodedWorkspaceId);
+            
+            const boardsQuery = query(collection(db, `workspaces/${hardcodedWorkspaceId}/boards`));
+            const unsubscribe = onSnapshot(boardsQuery, 
+                (querySnapshot) => {
+                    const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+                    setBoards(boardsData);
+                    setError(null);
+                    setLoading(false);
+                },
+                (err) => {
+                    console.error("Error fetching boards:", err);
+                    setError("Failed to fetch boards. Please check your connection and try again.");
+                    toast({ variant: 'destructive', title: 'Error fetching boards', description: err.message });
+                    setLoading(false);
+                }
+            );
+            return unsubscribe;
+
+        } catch (err: any) {
+            console.error("Error setting up workspace or fetching data:", err);
+            setError("Could not connect to the database. Some features may not be available.");
+            toast({ variant: 'destructive', title: 'Database Connection Error', description: err.message });
             setLoading(false);
-        });
-
-        return () => unsubscribe();
-      } catch (err: any) {
-        console.error("Error setting up workspace:", err);
-        setError("Could not connect to the database. Some features may not be available.");
-        toast({ variant: 'destructive', title: 'Connection Error', description: err.message });
-        setLoading(false);
-      }
+        }
     };
-    
-    const unsubscribePromise = setupAndFetchData();
+
+    const unsubscribePromise = setupAndFetch();
 
     return () => {
         unsubscribePromise.then(unsubscribe => {
@@ -200,7 +196,7 @@ export default function DashboardPage() {
                 <Skeleton className="h-48 w-full" />
              </div>
         ) : error ? (
-            <div className="text-destructive">{error}</div>
+            <div className="text-destructive text-center p-4 bg-destructive/10 rounded-md">{error}</div>
         ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {boards.map((board) => (
