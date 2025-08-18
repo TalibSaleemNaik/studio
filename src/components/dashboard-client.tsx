@@ -41,19 +41,19 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
 
         setIsCreating(true);
         try {
-            // Use a batch to perform multiple writes atomically
             const batch = writeBatch(db);
-
-            // 1. Create the new board document
             const boardRef = doc(collection(db, `workspaces/${workspaceId}/boards`));
+            
+            const members = { [user.uid]: 'owner' };
+
             batch.set(boardRef, {
                 name: title,
                 description: description,
                 createdAt: serverTimestamp(),
-                ownerId: user.uid
+                ownerId: user.uid,
+                members: members
             });
 
-            // 2. Create default groups for the new board
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
                 const groupRef = doc(collection(db, `workspaces/${workspaceId}/groups`));
@@ -64,7 +64,6 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                 });
             }
             
-            // Commit the batch
             await batch.commit();
 
             toast({ title: "Board created successfully!" });
@@ -137,7 +136,6 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
         const workspaceRef = doc(db, `workspaces/${workspaceId}`);
         await setDoc(workspaceRef, { 
             name: "Default Workspace", 
-            // Only set owner on creation
             ...( !doc(workspaceRef).id ? { ownerId: user.uid, createdAt: serverTimestamp() } : {} )
         }, { merge: true });
     } catch(e) {

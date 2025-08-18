@@ -4,7 +4,7 @@
 import React, from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, CalendarIcon, Flag, Sparkles, AlertTriangle, XIcon, UserPlus } from 'lucide-react';
+import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, CalendarIcon, Flag, Sparkles, AlertTriangle, XIcon, UserPlus, Share, Check, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,6 +26,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { suggestTaskTags } from '@/ai/flows/suggest-task-tags';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { Checkbox } from './ui/checkbox';
+
 
 interface Task {
   id: string;
@@ -50,6 +53,13 @@ interface Columns {
   [key: string]: Column;
 }
 
+interface BoardMember {
+  uid: string;
+  displayName: string;
+  photoURL: string;
+  role: 'owner' | 'editor' | 'viewer';
+}
+
 const priorityConfig = {
     low: { label: 'Low', icon: Flag, color: 'text-gray-500' },
     medium: { label: 'Medium', icon: Flag, color: 'text-yellow-500' },
@@ -58,7 +68,7 @@ const priorityConfig = {
 };
 
 
-function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }: { task: Task | null; workspaceId: string; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
+function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task | null; workspaceId: string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
     const [newTag, setNewTag] = React.useState("");
@@ -92,11 +102,9 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
 
     const getDisplayDate = () => {
         if (!editedTask.dueDate) return null;
-        // Check if it's a Firestore timestamp
         if (typeof editedTask.dueDate.toDate === 'function') {
             return editedTask.dueDate.toDate(); 
         }
-        // It's already a JS Date
         return editedTask.dueDate; 
     }
 
@@ -132,7 +140,6 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
             await updateDoc(taskRef, {
                 tags: arrayUnion(newTag.trim())
             });
-            // Firestore listener will update the state
             setNewTag("");
         }
     };
@@ -143,7 +150,15 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
         await updateDoc(taskRef, {
             tags: arrayRemove(tagToRemove)
         });
-        // Firestore listener will update the state
+    };
+    
+    const toggleAssignee = (uid: string) => {
+        if (!task) return;
+        const currentAssignees = editedTask.assignees || [];
+        const newAssignees = currentAssignees.includes(uid)
+            ? currentAssignees.filter(id => id !== uid)
+            : [...currentAssignees, uid];
+        handleUpdate('assignees', newAssignees);
     };
 
 
@@ -274,16 +289,46 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
                         
                         <div className="space-y-3">
                             <Label>Assignees</Label>
-                             <div className="flex items-center gap-2">
-                                {editedTask.assignees?.map(uid => (
-                                    <Avatar key={uid} className="h-8 w-8">
-                                        {/* In a real app, you'd fetch user data based on UID */}
-                                        <AvatarFallback>{uid.charAt(0).toUpperCase()}</AvatarFallback>
+                            <div className="flex items-center gap-2">
+                                {boardMembers.filter(member => editedTask.assignees?.includes(member.uid)).map(assignee => (
+                                    <Avatar key={assignee.uid} className="h-8 w-8">
+                                        <AvatarImage src={assignee.photoURL} alt={assignee.displayName} />
+                                        <AvatarFallback>{assignee.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                 ))}
-                                <Button variant="outline" size="icon" className="rounded-full">
-                                    <UserPlus className="h-4 w-4" />
-                                </Button>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" className="rounded-full">
+                                            <UserPlus className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="p-0">
+                                        <Command>
+                                            <CommandInput placeholder="Assign to..." />
+                                            <CommandList>
+                                                <CommandEmpty>No users found.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {boardMembers.map(member => (
+                                                        <CommandItem
+                                                            key={member.uid}
+                                                            onSelect={() => toggleAssignee(member.uid)}
+                                                        >
+                                                            <Checkbox
+                                                                className="mr-2"
+                                                                checked={editedTask.assignees?.includes(member.uid)}
+                                                            />
+                                                            <Avatar className="h-6 w-6 mr-2">
+                                                                <AvatarImage src={member.photoURL} />
+                                                                <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                                            </Avatar>
+                                                            <span>{member.displayName}</span>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
                             </div>
                         </div>
 
@@ -541,11 +586,64 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
     )
 }
 
+function BoardMembersDialog({ boardMembers }: { boardMembers: BoardMember[] }) {
+    return (
+        <Dialog>
+            <DialogTrigger asChild>
+                <Button variant="outline">
+                    <Share className="mr-2 h-4 w-4" /> Share
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Share Board</DialogTitle>
+                    <DialogDescription>
+                        Manage who has access to this board.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="flex space-x-2">
+                        <Input placeholder="Enter email to invite..." />
+                        <Button>Invite</Button>
+                    </div>
+                    <div className="space-y-2">
+                        <h4 className="font-medium">People with access</h4>
+                        {boardMembers.map(member => (
+                            <div key={member.uid} className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Avatar className="h-8 w-8">
+                                        <AvatarImage src={member.photoURL} />
+                                        <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                        <p className="font-semibold">{member.displayName}</p>
+                                        <p className="text-sm text-muted-foreground">{member.uid}</p>
+                                    </div>
+                                </div>
+                                <Select value={member.role}>
+                                    <SelectTrigger className="w-[110px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="editor">Editor</SelectItem>
+                                        <SelectItem value="viewer">Viewer</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 function Board({ boardId }: { boardId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
+  const [boardMembers, setBoardMembers] = React.useState<BoardMember[]>([]);
   const { toast } = useToast();
 
   const workspaceId = 'default-workspace';
@@ -557,6 +655,44 @@ function Board({ boardId }: { boardId: string }) {
     }
 
     setLoading(true);
+    
+    // Fetch Board Members
+    // Note: In a real app, you would have a more scalable way to get user details
+    // than fetching each user doc individually.
+    const unsubscribeMembers = onSnapshot(doc(db, `workspaces/${workspaceId}/boards`, boardId), async (boardSnap) => {
+        const boardData = boardSnap.data();
+        if (boardData && boardData.members) {
+            const memberPromises = Object.keys(boardData.members).map(uid => 
+                onSnapshot(doc(db, 'users', uid), userSnap => {
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        return {
+                            uid: userSnap.id,
+                            displayName: userData.displayName,
+                            photoURL: userData.photoURL,
+                            role: boardData.members[uid]
+                        } as BoardMember;
+                    }
+                    return null;
+                })
+            );
+            // This is not ideal as it creates multiple listeners.
+            // A better approach would be a backend function or a more structured user query.
+            // For now, we will just listen to the owner.
+             onSnapshot(doc(db, 'users', boardData.ownerId), (ownerSnap) => {
+                if (ownerSnap.exists()) {
+                    const ownerData = ownerSnap.data();
+                    setBoardMembers([{
+                        uid: ownerSnap.id,
+                        displayName: ownerData.displayName,
+                        photoURL: ownerData.photoURL,
+                        role: 'owner'
+                    }]);
+                }
+             });
+        }
+    });
+
 
     const groupsQuery = query(
       collection(db, `workspaces/${workspaceId}/groups`),
@@ -600,7 +736,10 @@ function Board({ boardId }: { boardId: string }) {
         setLoading(false);
     });
 
-    return () => unsubscribeGroups();
+    return () => {
+        unsubscribeGroups();
+        unsubscribeMembers();
+    }
 
   }, [user, boardId, workspaceId]);
 
@@ -697,9 +836,13 @@ function Board({ boardId }: { boardId: string }) {
 
   return (
       <>
+        <div className="flex items-center justify-end mb-4">
+            <BoardMembersDialog boardMembers={boardMembers} />
+        </div>
         <TaskDetailsDrawer 
             task={selectedTask} 
-            workspaceId={workspaceId} 
+            workspaceId={workspaceId}
+            boardMembers={boardMembers}
             isOpen={!!selectedTask} 
             onOpenChange={(open) => !open && setSelectedTask(null)} 
             onDelete={handleDeleteTask}
@@ -783,7 +926,7 @@ function Board({ boardId }: { boardId: string }) {
                                                                 <div className="flex -space-x-2 overflow-hidden">
                                                                     {item.assignees?.map(uid => (
                                                                         <Avatar key={uid} className="h-6 w-6 border-2 border-card">
-                                                                            <AvatarFallback>{uid.charAt(0).toUpperCase()}</AvatarFallback>
+                                                                            <AvatarFallback>{boardMembers.find(m => m.uid === uid)?.displayName?.charAt(0) || '?'}</AvatarFallback>
                                                                         </Avatar>
                                                                     ))}
                                                                 </div>
