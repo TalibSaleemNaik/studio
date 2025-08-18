@@ -27,8 +27,9 @@ interface Task {
   id: string;
   content: string;
   order: number;
+  groupId: string;
   description?: string;
-  dueDate?: any; // Firestore timestamp
+  dueDate?: any; // Firestore timestamp or JS Date
   priority?: 'low' | 'medium' | 'high' | 'urgent';
 }
 
@@ -80,10 +81,19 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange }: { task: 
         if (!date) return;
         handleUpdate('dueDate', date);
     };
+    
+    const getDisplayDate = () => {
+        if (!editedTask.dueDate) return null;
+        // The dueDate can be a Firestore Timestamp (from initial load) or a JS Date (from calendar picker)
+        if (typeof editedTask.dueDate.toDate === 'function') {
+            return editedTask.dueDate.toDate(); // It's a Firestore Timestamp
+        }
+        return editedTask.dueDate; // It's already a JS Date
+    }
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[500px] sm:w-[540px] flex flex-col">
+            <SheetContent className="w-full max-w-[500px] sm:max-w-lg flex flex-col">
                 <SheetHeader>
                     <SheetTitle>Task Details</SheetTitle>
                     <SheetDescription>
@@ -128,13 +138,13 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange }: { task: 
                                             )}
                                             >
                                             <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {editedTask.dueDate ? format(editedTask.dueDate.toDate(), "PPP") : <span>Pick a date</span>}
+                                            {getDisplayDate() ? format(getDisplayDate()!, "PPP") : <span>Pick a date</span>}
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0">
                                         <Calendar
                                             mode="single"
-                                            selected={editedTask.dueDate?.toDate()}
+                                            selected={getDisplayDate() ?? undefined}
                                             onSelect={handleDateSelect}
                                             initialFocus
                                         />
@@ -145,20 +155,36 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange }: { task: 
                                 <Label>Priority</Label>
                                 <Select
                                     value={editedTask.priority}
-                                    onValueChange={(value) => handleUpdate('priority', value)}
+                                    onValueChange={(value) => handleUpdate('priority', value as Task['priority'])}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Set priority" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {Object.entries(priorityConfig).map(([key, {label, icon: Icon}]) => (
-                                            <SelectItem key={key} value={key}>
-                                                <div className="flex items-center gap-2">
-                                                    <Icon className="h-4 w-4" />
-                                                    <span>{label}</span>
-                                                </div>
-                                            </SelectItem>
-                                        ))}
+                                        <SelectItem value="low">
+                                            <div className="flex items-center gap-2">
+                                                <Flag className={cn("h-4 w-4", priorityConfig.low.color)} />
+                                                <span>{priorityConfig.low.label}</span>
+                                            </div>
+                                        </SelectItem>
+                                         <SelectItem value="medium">
+                                            <div className="flex items-center gap-2">
+                                                <Flag className={cn("h-4 w-4", priorityConfig.medium.color)} />
+                                                <span>{priorityConfig.medium.label}</span>
+                                            </div>
+                                        </SelectItem>
+                                         <SelectItem value="high">
+                                            <div className="flex items-center gap-2">
+                                                <Flag className={cn("h-4 w-4", priorityConfig.high.color)} />
+                                                <span>{priorityConfig.high.label}</span>
+                                            </div>
+                                        </SelectItem>
+                                         <SelectItem value="urgent">
+                                            <div className="flex items-center gap-2">
+                                                <Flag className={cn("h-4 w-4", priorityConfig.urgent.color)} />
+                                                <span>{priorityConfig.urgent.label}</span>
+                                            </div>
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -308,6 +334,7 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
     const { toast } = useToast();
     const [isRenameOpen, setIsRenameOpen] = React.useState(false);
     const [newName, setNewName] = React.useState(column.name);
+    const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
 
     const handleRename = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -325,8 +352,6 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
     }
 
     const handleDelete = async () => {
-        if (!window.confirm(`Are you sure you want to delete "${column.name}" and all its tasks? This action cannot be undone.`)) return;
-
         const batch = writeBatch(db);
         batch.delete(doc(db, `workspaces/${workspaceId}/groups`, column.id));
         column.items.forEach(task => {
@@ -338,6 +363,8 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
             toast({ title: "List deleted" });
         } catch (error) {
             toast({ variant: 'destructive', title: 'Failed to delete list' });
+        } finally {
+            setIsConfirmOpen(false);
         }
     }
 
@@ -351,14 +378,15 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                     <DropdownMenuItem onSelect={() => setIsRenameOpen(true)}>
-                        <Edit className="mr-2" /> Rename
+                        <Edit className="mr-2 h-4 w-4" /> Rename
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
-                        <Trash2 className="mr-2" /> Delete
+                    <DropdownMenuItem className="text-destructive" onSelect={() => setIsConfirmOpen(true)}>
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
+
             <Dialog open={isRenameOpen} onOpenChange={setIsRenameOpen}>
                 <DialogContent>
                     <form onSubmit={handleRename}>
@@ -367,9 +395,25 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
                         </DialogHeader>
                         <Input value={newName} onChange={(e) => setNewName(e.target.value)} className="my-4" />
                         <DialogFooter>
+                            <Button type="button" variant="secondary" onClick={() => setIsRenameOpen(false)}>Cancel</Button>
                             <Button type="submit">Save</Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+             <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+                <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Are you sure?</DialogTitle>
+                             <DialogDescription>
+                               This will delete the list "{column.name}" and all of its tasks. This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button type="button" variant="secondary" onClick={() => setIsConfirmOpen(false)}>Cancel</Button>
+                            <Button type="button" variant="destructive" onClick={handleDelete}>Delete</Button>
+                        </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
@@ -386,7 +430,6 @@ function Board({ boardId }: { boardId: string }) {
   const workspaceId = 'default-workspace';
 
   React.useEffect(() => {
-    // Wait until we have a user and a boardId.
     if (!user || !boardId || !workspaceId) {
         setLoading(true);
         return;
