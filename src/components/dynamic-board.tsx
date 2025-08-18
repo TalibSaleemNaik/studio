@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, Calendar, Flag, Sparkles, AlertTriangle, X, UserPlus, Share, Check, Users, MessageSquare } from 'lucide-react';
+import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, Calendar, Flag, Sparkles, AlertTriangle, X, UserPlus, Share, Check, Users, MessageSquare, Trash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,7 +28,14 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Checkbox } from './ui/checkbox';
+import { Progress } from './ui/progress';
 
+
+interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
 
 interface Task {
   id: string;
@@ -40,6 +47,8 @@ interface Task {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   tags?: string[];
   assignees?: string[]; // Array of user UIDs
+  comments?: Comment[];
+  checklist?: ChecklistItem[];
 }
 
 interface Column {
@@ -91,6 +100,7 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
     const [comments, setComments] = React.useState<Comment[]>([]);
     const [newComment, setNewComment] = React.useState("");
     const [isPostingComment, setIsPostingComment] = React.useState(false);
+    const [newChecklistItem, setNewChecklistItem] = React.useState("");
     const { toast } = useToast();
     
     React.useEffect(() => {
@@ -210,6 +220,38 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
             setIsPostingComment(false);
         }
     };
+
+    const handleAddChecklistItem = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && newChecklistItem.trim()) {
+            e.preventDefault();
+            const newItem: ChecklistItem = {
+                id: new Date().toISOString(),
+                text: newChecklistItem.trim(),
+                completed: false,
+            };
+            const newChecklist = [...(editedTask.checklist || []), newItem];
+            handleUpdate('checklist', newChecklist);
+            setNewChecklistItem("");
+        }
+    };
+    
+    const toggleChecklistItem = (itemId: string) => {
+        const newChecklist = editedTask.checklist?.map(item =>
+            item.id === itemId ? { ...item, completed: !item.completed } : item
+        );
+        handleUpdate('checklist', newChecklist);
+    };
+
+    const handleDeleteChecklistItem = (itemId: string) => {
+        const newChecklist = editedTask.checklist?.filter(item => item.id !== itemId);
+        handleUpdate('checklist', newChecklist);
+    };
+    
+    const checklistProgress = React.useMemo(() => {
+        if (!editedTask.checklist || editedTask.checklist.length === 0) return 0;
+        const completedCount = editedTask.checklist.filter(item => item.completed).length;
+        return (completedCount / editedTask.checklist.length) * 100;
+    }, [editedTask.checklist]);
 
 
     return (
@@ -381,6 +423,45 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
                                 </Popover>
                             </div>
                         </div>
+
+                         <div className="space-y-4">
+                            <Label>Checklist</Label>
+                            {editedTask.checklist && editedTask.checklist.length > 0 && (
+                                <div className="space-y-2">
+                                    <Progress value={checklistProgress} className="h-2" />
+                                    {editedTask.checklist.map(item => (
+                                        <div key={item.id} className="flex items-center gap-2 group">
+                                            <Checkbox
+                                                id={`checklist-${item.id}`}
+                                                checked={item.completed}
+                                                onCheckedChange={() => toggleChecklistItem(item.id)}
+                                            />
+                                            <label
+                                                htmlFor={`checklist-${item.id}`}
+                                                className={cn("flex-1 text-sm", item.completed && "line-through text-muted-foreground")}
+                                            >
+                                                {item.text}
+                                            </label>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                                onClick={() => handleDeleteChecklistItem(item.id)}
+                                            >
+                                                <Trash className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <Input
+                                placeholder="Add a checklist item and press Enter..."
+                                value={newChecklistItem}
+                                onChange={(e) => setNewChecklistItem(e.target.value)}
+                                onKeyDown={handleAddChecklistItem}
+                            />
+                        </div>
+
 
                          <div className="space-y-4">
                             <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1106,3 +1187,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
