@@ -12,7 +12,7 @@ import { db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -92,9 +92,11 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
 
     const getDisplayDate = () => {
         if (!editedTask.dueDate) return null;
+        // Check if it's a Firestore timestamp
         if (typeof editedTask.dueDate.toDate === 'function') {
             return editedTask.dueDate.toDate(); 
         }
+        // It's already a JS Date
         return editedTask.dueDate; 
     }
 
@@ -563,9 +565,6 @@ function Board({ boardId }: { boardId: string }) {
     );
 
     const unsubscribeGroups = onSnapshot(groupsQuery, (querySnapshot) => {
-      if (querySnapshot.empty && boardId) {
-        // This case can be handled by the create board logic, maybe show a special empty state here.
-      }
       const groupsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
       
       const tasksQuery = query(
@@ -853,4 +852,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
