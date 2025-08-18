@@ -170,7 +170,7 @@ function CreateTaskDialog({ workspaceId, boardId, groupId, onTaskCreated, column
 
 function Board({ boardId }: { boardId: string }) {
   const { user } = useAuth();
-  const [columns, setColumns] = useState<Columns>({});
+  const [columns, setColumns] = useState<Columns | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Hardcoded workspaceId for now. This should come from user context or props.
@@ -179,7 +179,6 @@ function Board({ boardId }: { boardId: string }) {
   useEffect(() => {
     // Wait until we have a user and a boardId.
     if (!user || !boardId || !workspaceId) {
-        // Keep showing loader if we are not ready
         setLoading(true);
         return;
     }
@@ -234,8 +233,8 @@ function Board({ boardId }: { boardId: string }) {
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, type } = result;
+    if (!destination || !columns) return;
 
-    if (!destination) return;
 
     if (type === 'COLUMN') {
         const orderedColumns = Object.values(columns).sort((a,b) => a.order - b.order);
@@ -265,11 +264,9 @@ function Board({ boardId }: { boardId: string }) {
     const sourceItems = [...startColumn.items];
     const [removed] = sourceItems.splice(source.index, 1);
 
-    // Update local state immediately for better UX
     const newColumns = { ...columns };
 
     if (sourceColId === destColId) {
-      // Moving within the same column
       sourceItems.splice(destination.index, 0, removed);
       newColumns[sourceColId] = {
         ...startColumn,
@@ -277,13 +274,11 @@ function Board({ boardId }: { boardId: string }) {
       };
       setColumns(newColumns);
       
-      // Update order in Firestore
       for (let i = 0; i < sourceItems.length; i++) {
         await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, sourceItems[i].id), { order: i });
       }
 
     } else {
-      // Moving to a different column
       const destItems = [...endColumn.items];
       destItems.splice(destination.index, 0, removed);
       
@@ -291,25 +286,22 @@ function Board({ boardId }: { boardId: string }) {
       newColumns[destColId] = { ...endColumn, items: destItems };
       setColumns(newColumns);
 
-      // Update groupId and order for the moved task
       await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, removed.id), {
         groupId: destColId,
         order: destination.index, 
       });
 
-      // Update order in source column
       for (let i = 0; i < sourceItems.length; i++) {
         await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, sourceItems[i].id), { order: i });
       }
 
-      // Update order in destination column
        for (let i = 0; i < destItems.length; i++) {
         await updateDoc(doc(db, `workspaces/${workspaceId}/tasks`, destItems[i].id), { order: i });
       }
     }
   };
 
-  if (loading) {
+  if (loading || !columns) {
     return <BoardSkeleton />;
   }
   
@@ -332,11 +324,11 @@ function Board({ boardId }: { boardId: string }) {
                             {...provided.draggableProps}
                             className="shrink-0 w-80"
                         >
-                            <div 
-                                {...provided.dragHandleProps}
-                                className="bg-muted/60 rounded-xl p-4 h-full flex flex-col"
-                            >
-                                <div className="flex justify-between items-center mb-4">
+                            <div className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
+                                <div 
+                                    {...provided.dragHandleProps}
+                                    className="flex justify-between items-center mb-4 cursor-grab"
+                                >
                                 <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
                                 <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
                                 </div>
@@ -414,12 +406,13 @@ function BoardSkeleton() {
         <div key={name} className="shrink-0 w-80">
             <div className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-foreground/90">{name}</h2>
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-8" />
             </div>
             <div className="space-y-4 flex-1 overflow-y-auto">
                 <Skeleton className="h-20 w-full" />
                 <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-12 w-full" />
             </div>
             </div>
         </div>
@@ -432,5 +425,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    

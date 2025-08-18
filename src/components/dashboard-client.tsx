@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 
@@ -30,30 +30,42 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const { toast } = useToast();
+    const { user } = useAuth();
 
     const handleAction = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!title.trim()) {
+        if (!title.trim() || !user) {
             toast({ variant: 'destructive', title: 'Board title is required.' });
             return;
         }
 
         setIsCreating(true);
         try {
-            const boardRef = await addDoc(collection(db, `workspaces/${workspaceId}/boards`), {
+            // Use a batch to perform multiple writes atomically
+            const batch = writeBatch(db);
+
+            // 1. Create the new board document
+            const boardRef = doc(collection(db, `workspaces/${workspaceId}/boards`));
+            batch.set(boardRef, {
                 name: title,
                 description: description,
                 createdAt: serverTimestamp(),
+                ownerId: user.uid
             });
-            
+
+            // 2. Create default groups for the new board
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
-                await addDoc(collection(db, `workspaces/${workspaceId}/groups`), {
+                const groupRef = doc(collection(db, `workspaces/${workspaceId}/groups`));
+                batch.set(groupRef, {
                     boardId: boardRef.id,
                     name: defaultGroups[i],
                     order: i,
                 });
             }
+            
+            // Commit the batch
+            await batch.commit();
 
             toast({ title: "Board created successfully!" });
             setIsOpen(false);
@@ -71,7 +83,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                <Card className="flex items-center justify-center border-dashed hover:border-primary hover:text-primary transition-colors cursor-pointer">
+                <Card className="flex items-center justify-center border-dashed hover:border-primary hover:text-primary transition-colors cursor-pointer min-h-[192px]">
                     <CardContent className="p-6 text-center">
                         <div className="flex flex-col h-auto gap-2 items-center">
                         <PlusCircle className="h-8 w-8 text-muted-foreground" />
@@ -85,7 +97,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                     <DialogHeader>
                         <DialogTitle>Create New Board</DialogTitle>
                         <DialogDescription>
-                            Give your new board a title and description.
+                            Give your new board a title and description. Three default lists (To Do, In Progress, Done) will be created for you.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -120,23 +132,21 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
   const { user } = useAuth();
   
   const ensureWorkspaceExists = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!user || !workspaceId) return;
     try {
         const workspaceRef = doc(db, `workspaces/${workspaceId}`);
-        // This is a client-side check, so we can't use `getDoc` from admin SDK.
-        // A full `getDoc` from the client SDK is possible, but for now, we'll
-        // assume the workspace might need creating and attempt a `set` with `merge`.
-        // A more robust solution might involve a cloud function for initialization.
-        await setDoc(workspaceRef, { name: "Default Workspace", createdAt: serverTimestamp() }, { merge: true });
+        await setDoc(workspaceRef, { 
+            name: "Default Workspace", 
+            // Only set owner on creation
+            ...( !doc(workspaceRef).id ? { ownerId: user.uid, createdAt: serverTimestamp() } : {} )
+        }, { merge: true });
     } catch(e) {
         console.error("Error ensuring workspace exists:", e);
-        // This is not a fatal error for loading boards, so we'll just log it.
     }
-  }, [workspaceId]);
+  }, [workspaceId, user]);
 
   useEffect(() => {
     if (!user || !workspaceId) {
-        // Don't start fetching if we don't have a user or workspace
         setLoading(true);
         return;
     }
@@ -162,7 +172,7 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
   if (loading) {
       return (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
           </div>
       )
   }
@@ -180,7 +190,7 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {boards.map((board) => (
-            <Card key={board.id} className="hover:shadow-md transition-shadow">
+            <Card key={board.id} className="hover:shadow-md transition-shadow flex flex-col">
             <CardHeader>
                 <div className="flex items-start justify-between">
                 <CardTitle className="font-headline">{board.name}</CardTitle>
@@ -197,11 +207,11 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
                     </DropdownMenuContent>
                 </DropdownMenu>
                 </div>
-                <CardDescription>{board.description || 'No description'}</CardDescription>
+                <CardDescription className="line-clamp-2">{board.description || 'No description'}</CardDescription>
             </CardHeader>
-            <CardFooter className="flex justify-between items-center">
+            <CardFooter className="flex justify-between items-center mt-auto">
                 <div className="flex -space-x-2 overflow-hidden">
-                    <Avatar>
+                    <Avatar className="h-8 w-8 border-2 border-background">
                         <AvatarFallback>+?</AvatarFallback>
                     </Avatar>
                 </div>
