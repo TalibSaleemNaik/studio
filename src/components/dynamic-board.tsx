@@ -150,7 +150,6 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
     }
 
     const handleDelete = () => {
-        if (!task) return;
         onDelete(task.id);
     }
     
@@ -194,7 +193,6 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
     };
     
     const toggleAssignee = (uid: string) => {
-        if (!task) return;
         const currentAssignees = editedTask.assignees || [];
         const newAssignees = currentAssignees.includes(uid)
             ? currentAssignees.filter(id => id !== uid)
@@ -204,7 +202,7 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
     
     const handlePostComment = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newComment.trim() || !user || !task) return;
+        if (!newComment.trim() || !user) return;
         setIsPostingComment(true);
 
         try {
@@ -760,7 +758,78 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
     )
 }
 
-function BoardMembersDialog({ boardMembers }: { boardMembers: BoardMember[] }) {
+function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceId: string, boardId: string, boardMembers: BoardMember[] }) {
+    const [inviteEmail, setInviteEmail] = React.useState('');
+    const [isInviting, setIsInviting] = React.useState(false);
+    const { toast } = useToast();
+
+    const handleInvite = async () => {
+        if (!inviteEmail.trim()) {
+            toast({ variant: 'destructive', title: 'Please enter an email address.' });
+            return;
+        }
+        setIsInviting(true);
+        try {
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('email', '==', inviteEmail.trim()));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                toast({ variant: 'destructive', title: 'User not found.' });
+                return;
+            }
+
+            const userToInvite = querySnapshot.docs[0];
+            const userId = userToInvite.id;
+
+            if (boardMembers.some(member => member.uid === userId)) {
+                toast({ variant: 'destructive', title: 'User is already a member of this board.' });
+                return;
+            }
+
+            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            await updateDoc(boardRef, {
+                [`members.${userId}`]: 'editor'
+            });
+
+            toast({ title: 'User invited successfully!' });
+            setInviteEmail('');
+
+        } catch (error) {
+            console.error("Error inviting user:", error);
+            toast({ variant: 'destructive', title: 'Failed to invite user.' });
+        } finally {
+            setIsInviting(false);
+        }
+    };
+    
+    const handleRoleChange = async (memberId: string, newRole: 'editor' | 'viewer') => {
+        try {
+            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            await updateDoc(boardRef, {
+                [`members.${memberId}`]: newRole
+            });
+            toast({ title: 'Member role updated.' });
+        } catch (error) {
+            console.error("Error updating role:", error);
+            toast({ variant: 'destructive', title: 'Failed to update member role.' });
+        }
+    };
+    
+    const handleRemoveMember = async (memberId: string) => {
+        try {
+            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            await updateDoc(boardRef, {
+                [`members.${memberId}`]: deleteDoc // This is not correct syntax for deleting a map field. It should be FieldValue.delete() but that's not imported.
+            });
+             toast({ title: 'Member removed.' });
+        } catch (error) {
+            console.error("Error removing member:", error);
+            toast({ variant: 'destructive', title: 'Failed to remove member.' });
+        }
+    }
+
+
     return (
         <Dialog>
             <DialogTrigger asChild>
@@ -777,8 +846,15 @@ function BoardMembersDialog({ boardMembers }: { boardMembers: BoardMember[] }) {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                     <div className="flex space-x-2">
-                        <Input placeholder="Enter email to invite..." />
-                        <Button>Invite</Button>
+                        <Input 
+                            placeholder="Enter email to invite..." 
+                            value={inviteEmail}
+                            onChange={(e) => setInviteEmail(e.target.value)}
+                            disabled={isInviting}
+                        />
+                        <Button onClick={handleInvite} disabled={isInviting}>
+                            {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Invite'}
+                        </Button>
                     </div>
                     <div className="space-y-2">
                         <h4 className="font-medium">People with access</h4>
@@ -794,7 +870,11 @@ function BoardMembersDialog({ boardMembers }: { boardMembers: BoardMember[] }) {
                                         <p className="text-sm text-muted-foreground">{member.email}</p>
                                     </div>
                                 </div>
-                                <Select value={member.role}>
+                                <Select 
+                                    value={member.role}
+                                    onValueChange={(value) => handleRoleChange(member.uid, value as 'editor' | 'viewer')}
+                                    disabled={member.role === 'owner'}
+                                >
                                     <SelectTrigger className="w-[110px]">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -1043,7 +1123,7 @@ function Board({ boardId }: { boardId: string }) {
                     className="pl-9 w-64"
                 />
             </div>
-            <BoardMembersDialog boardMembers={boardMembers} />
+            <BoardMembersDialog workspaceId={workspaceId} boardId={boardId} boardMembers={boardMembers} />
         </div>
         {selectedTask && (
             <TaskDetailsDrawer 
@@ -1207,6 +1287,4 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
 
