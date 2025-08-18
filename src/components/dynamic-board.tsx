@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, from 'react';
+import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, CalendarIcon, Flag, Sparkles, AlertTriangle, XIcon, UserPlus, Share, Check, Users } from 'lucide-react';
+import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, Calendar, Flag, Sparkles, AlertTriangle, X, UserPlus, Share, Check, Users, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,8 +19,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from '@/components/ui/sheet';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Calendar } from './ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { suggestTaskTags } from '@/ai/flows/suggest-task-tags';
@@ -64,6 +64,17 @@ interface BoardMember extends UserProfile {
   role: 'owner' | 'editor' | 'viewer';
 }
 
+interface Comment {
+  id: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorPhotoURL: string;
+  createdAt: any; // Firestore Timestamp
+}
+
+const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
+
 const priorityConfig = {
     low: { label: 'Low', icon: Flag, color: 'text-gray-500' },
     medium: { label: 'Medium', icon: Flag, color: 'text-yellow-500' },
@@ -73,14 +84,29 @@ const priorityConfig = {
 
 
 function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task | null; workspaceId: string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
+    const { user } = useAuth();
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
     const [newTag, setNewTag] = React.useState("");
+    const [comments, setComments] = React.useState<Comment[]>([]);
+    const [newComment, setNewComment] = React.useState("");
+    const [isPostingComment, setIsPostingComment] = React.useState(false);
     const { toast } = useToast();
     
     React.useEffect(() => {
         setEditedTask(task);
-    }, [task]);
+        if (task && workspaceId) {
+            const commentsQuery = query(
+                collection(db, `workspaces/${workspaceId}/tasks/${task.id}/comments`),
+                orderBy('createdAt', 'asc')
+            );
+            const unsubscribe = onSnapshot(commentsQuery, (snapshot) => {
+                const commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
+                setComments(commentsData);
+            });
+            return () => unsubscribe();
+        }
+    }, [task, workspaceId]);
     
     if (!editedTask) return null;
 
@@ -106,10 +132,7 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
 
     const getDisplayDate = () => {
         if (!editedTask.dueDate) return null;
-        if (typeof editedTask.dueDate.toDate === 'function') {
-            return editedTask.dueDate.toDate(); 
-        }
-        return editedTask.dueDate; 
+        return asJsDate(editedTask.dueDate);
     }
 
     const handleDelete = () => {
@@ -164,6 +187,29 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
             : [...currentAssignees, uid];
         handleUpdate('assignees', newAssignees);
     };
+    
+    const handlePostComment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newComment.trim() || !user || !task) return;
+        setIsPostingComment(true);
+
+        try {
+            const commentsCollectionRef = collection(db, `workspaces/${workspaceId}/tasks/${task.id}/comments`);
+            await addDoc(commentsCollectionRef, {
+                content: newComment,
+                authorId: user.uid,
+                authorName: user.displayName || 'Anonymous',
+                authorPhotoURL: user.photoURL || '',
+                createdAt: serverTimestamp(),
+            });
+            setNewComment('');
+        } catch (error) {
+            console.error("Failed to post comment:", error);
+            toast({ variant: 'destructive', title: 'Failed to post comment' });
+        } finally {
+            setIsPostingComment(false);
+        }
+    };
 
 
     return (
@@ -212,12 +258,12 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
                                                 !editedTask.dueDate && "text-muted-foreground"
                                             )}
                                             >
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            <Calendar className="mr-2 h-4 w-4" />
                                             {getDisplayDate() ? format(getDisplayDate()!, "PPP") : <span>Pick a date</span>}
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0">
-                                        <Calendar
+                                        <CalendarPicker
                                             mode="single"
                                             selected={getDisplayDate() ?? undefined}
                                             onSelect={handleDateSelect}
@@ -278,7 +324,7 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
                                     <Badge key={tag} variant="secondary" className="flex items-center gap-1">
                                         {tag}
                                         <button onClick={() => handleRemoveTag(tag)} className="rounded-full hover:bg-black/10">
-                                            <XIcon className="h-3 w-3" />
+                                            <X className="h-3 w-3" />
                                         </button>
                                     </Badge>
                                 ))}
@@ -336,6 +382,51 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
                             </div>
                         </div>
 
+                         <div className="space-y-4">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <MessageSquare className="h-5 w-5" />
+                                Activity
+                            </h3>
+                            <div className="space-y-4">
+                                {comments.map(comment => (
+                                    <div key={comment.id} className="flex items-start gap-3">
+                                        <Avatar className="h-8 w-8">
+                                            <AvatarImage src={comment.authorPhotoURL} alt={comment.authorName} />
+                                            <AvatarFallback>{comment.authorName?.charAt(0).toUpperCase()}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1">
+                                            <div className="flex items-baseline gap-2">
+                                                <p className="font-semibold">{comment.authorName}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                     {comment.createdAt ? format(asJsDate(comment.createdAt), 'PP p') : '...'}
+                                                </p>
+                                            </div>
+                                            <div className="mt-1 rounded-md bg-muted/50 p-3 text-sm">
+                                                <p>{comment.content}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <form onSubmit={handlePostComment} className="flex items-start gap-3">
+                                <Avatar className="h-8 w-8">
+                                    <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || ''} />
+                                    <AvatarFallback>{user?.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <div className='flex-1'>
+                                    <Input 
+                                        placeholder="Write a comment..."
+                                        value={newComment}
+                                        onChange={(e) => setNewComment(e.target.value)}
+                                        disabled={isPostingComment}
+                                    />
+                                     <Button type="submit" size="sm" className="mt-2" disabled={isPostingComment || !newComment.trim()}>
+                                        {isPostingComment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Save Comment
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
                 <SheetFooter className='border-t pt-4'>
@@ -825,7 +916,16 @@ function Board({ boardId }: { boardId: string }) {
   
   const handleDeleteTask = async (taskId: string) => {
       try {
-        await deleteDoc(doc(db, `workspaces/${workspaceId}/tasks`, taskId));
+        // Also delete the comments subcollection
+        const commentsQuery = query(collection(db, `workspaces/${workspaceId}/tasks/${taskId}/comments`));
+        const commentsSnapshot = await getDocs(commentsQuery);
+        const batch = writeBatch(db);
+        commentsSnapshot.forEach(doc => batch.delete(doc.ref));
+        
+        batch.delete(doc(db, `workspaces/${workspaceId}/tasks`, taskId));
+        
+        await batch.commit();
+
         toast({ title: 'Task deleted successfully' });
         setSelectedTask(null); // Close the drawer
       } catch (error) {
@@ -921,8 +1021,8 @@ function Board({ boardId }: { boardId: string }) {
                                                                 <div className='flex items-center gap-2'>
                                                                     {item.dueDate && (
                                                                         <div className='flex items-center gap-1 text-xs'>
-                                                                            <CalendarIcon className='h-3 w-3' />
-                                                                            <span>{format(item.dueDate.toDate(), 'MMM d')}</span>
+                                                                            <Calendar className='h-3 w-3' />
+                                                                            <span>{format(asJsDate(item.dueDate), 'MMM d')}</span>
                                                                         </div>
                                                                     )}
                                                                     {item.priority && priorityConfig[item.priority] && (() => {
