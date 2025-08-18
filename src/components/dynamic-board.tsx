@@ -4,7 +4,7 @@
 import React, from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, CalendarIcon, Flag, X } from 'lucide-react';
+import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, CalendarIcon, Flag, Sparkles, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,8 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { suggestTaskTags } from '@/ai/flows/suggest-task-tags';
+import { Badge } from './ui/badge';
 
 interface Task {
   id: string;
@@ -31,6 +34,7 @@ interface Task {
   description?: string;
   dueDate?: any; // Firestore timestamp or JS Date
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  tags?: string[];
 }
 
 interface Column {
@@ -52,14 +56,15 @@ const priorityConfig = {
 };
 
 
-function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange }: { task: Task | null; workspaceId: string; isOpen: boolean; onOpenChange: (open: boolean) => void; }) {
+function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }: { task: Task | null; workspaceId: string; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
     const [editedTask, setEditedTask] = React.useState(task);
+    const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
     const { toast } = useToast();
     
     React.useEffect(() => {
         setEditedTask(task);
     }, [task]);
-
+    
     if (!editedTask) return null;
 
     const handleUpdate = async (field: keyof Task, value: any) => {
@@ -81,19 +86,41 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange }: { task: 
         if (!date) return;
         handleUpdate('dueDate', date);
     };
-    
+
     const getDisplayDate = () => {
         if (!editedTask.dueDate) return null;
-        // The dueDate can be a Firestore Timestamp (from initial load) or a JS Date (from calendar picker)
         if (typeof editedTask.dueDate.toDate === 'function') {
-            return editedTask.dueDate.toDate(); // It's a Firestore Timestamp
+            return editedTask.dueDate.toDate(); 
         }
-        return editedTask.dueDate; // It's already a JS Date
+        return editedTask.dueDate; 
+    }
+
+    const handleDelete = () => {
+        if (!task) return;
+        onDelete(task.id);
+    }
+    
+    const handleGenerateTags = async () => {
+        setIsGeneratingTags(true);
+        try {
+            const result = await suggestTaskTags({
+                title: editedTask.content,
+                description: editedTask.description,
+            });
+            if (result.suggestedTags) {
+                handleUpdate('tags', Array.from(new Set([...(editedTask.tags || []), ...result.suggestedTags])));
+            }
+        } catch (error) {
+            console.error("Failed to generate tags:", error);
+            toast({ variant: 'destructive', title: 'AI Suggestion Failed' });
+        } finally {
+            setIsGeneratingTags(false);
+        }
     }
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full max-w-[500px] sm:max-w-lg flex flex-col">
+            <SheetContent className="w-full max-w-2xl flex flex-col">
                 <SheetHeader>
                     <SheetTitle>Task Details</SheetTitle>
                     <SheetDescription>
@@ -189,9 +216,51 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange }: { task: 
                                 </Select>
                             </div>
                         </div>
+                        
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label>Tags</Label>
+                                <Button variant="ghost" size="sm" onClick={handleGenerateTags} disabled={isGeneratingTags}>
+                                    {isGeneratingTags ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
+                                    AI Suggest
+                                </Button>
+                            </div>
+                             <div className="flex flex-wrap gap-2">
+                                {editedTask.tags?.map(tag => (
+                                    <Badge key={tag} variant="secondary">{tag}</Badge>
+                                ))}
+                                {(!editedTask.tags || editedTask.tags.length === 0) && (
+                                    <p className='text-sm text-muted-foreground'>No tags yet.</p>
+                                )}
+                            </div>
+                        </div>
 
                     </div>
                 </div>
+                <SheetFooter className='border-t pt-4'>
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" className='mr-auto'>
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete Task
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete this task.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete}>Continue</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                    <SheetClose asChild>
+                        <Button>Close</Button>
+                    </SheetClose>
+                </SheetFooter>
             </SheetContent>
         </Sheet>
     );
@@ -402,7 +471,7 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
                 </DialogContent>
             </Dialog>
 
-             <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+             <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
                 <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Are you sure?</DialogTitle>
@@ -415,7 +484,7 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
                             <Button type="button" variant="destructive" onClick={handleDelete}>Delete</Button>
                         </DialogFooter>
                 </DialogContent>
-            </Dialog>
+            </AlertDialog>
         </>
     )
 }
@@ -425,8 +494,8 @@ function Board({ boardId }: { boardId: string }) {
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
+  const { toast } = useToast();
 
-  // Hardcoded workspaceId for now. This should come from user context or props.
   const workspaceId = 'default-workspace';
 
   React.useEffect(() => {
@@ -555,6 +624,18 @@ function Board({ boardId }: { boardId: string }) {
     setColumns(newColumns);
     await batch.commit();
   };
+  
+  const handleDeleteTask = async (taskId: string) => {
+      try {
+        await deleteDoc(doc(db, `workspaces/${workspaceId}/tasks`, taskId));
+        toast({ title: 'Task deleted successfully' });
+        setSelectedTask(null); // Close the drawer
+      } catch (error) {
+        console.error("Failed to delete task:", error);
+        toast({ variant: 'destructive', title: 'Failed to delete task' });
+      }
+  }
+
 
   if (loading || !columns) {
     return <BoardSkeleton />;
@@ -569,6 +650,7 @@ function Board({ boardId }: { boardId: string }) {
             workspaceId={workspaceId} 
             isOpen={!!selectedTask} 
             onOpenChange={(open) => !open && setSelectedTask(null)} 
+            onDelete={handleDeleteTask}
         />
         <DragDropContext onDragEnd={onDragEnd}>
             <Droppable droppableId="board" type="COLUMN" direction="horizontal">
@@ -628,6 +710,11 @@ function Board({ boardId }: { boardId: string }) {
                                                         }}
                                                         >
                                                             <p className="font-medium">{item.content}</p>
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {item.tags?.map(tag => (
+                                                                    <Badge key={tag} variant="secondary" className='text-xs'>{tag}</Badge>
+                                                                ))}
+                                                            </div>
                                                             <div className='flex justify-between items-center text-muted-foreground'>
                                                                 <div className='flex items-center gap-2'>
                                                                     {item.dueDate && (
