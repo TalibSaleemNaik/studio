@@ -89,9 +89,11 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
 
     const getDisplayDate = () => {
         if (!editedTask.dueDate) return null;
+        // Check if it's a Firestore Timestamp
         if (typeof editedTask.dueDate.toDate === 'function') {
             return editedTask.dueDate.toDate(); 
         }
+        // Otherwise, it's already a JS Date
         return editedTask.dueDate; 
     }
 
@@ -472,18 +474,18 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
             </Dialog>
 
              <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
-                <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Are you sure?</DialogTitle>
-                             <DialogDescription>
+                <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                             <AlertDialogDescription>
                                This will delete the list "{column.name}" and all of its tasks. This action cannot be undone.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button type="button" variant="secondary" onClick={() => setIsConfirmOpen(false)}>Cancel</Button>
-                            <Button type="button" variant="destructive" onClick={handleDelete}>Delete</Button>
-                        </DialogFooter>
-                </DialogContent>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                </AlertDialogContent>
             </AlertDialog>
         </>
     )
