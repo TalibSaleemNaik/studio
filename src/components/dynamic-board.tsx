@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, Calendar, Flag, Sparkles, AlertTriangle, X, UserPlus, Share, Check, Users, MessageSquare, Trash } from 'lucide-react';
+import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, Calendar, Flag, Sparkles, AlertTriangle, X, UserPlus, Share, Check, Users, MessageSquare, Trash, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -819,6 +819,7 @@ function Board({ boardId }: { boardId: string }) {
   const [loading, setLoading] = React.useState(true);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
   const [boardMembers, setBoardMembers] = React.useState<BoardMember[]>([]);
+  const [searchTerm, setSearchTerm] = React.useState('');
   const { toast } = useToast();
 
   const workspaceId = 'default-workspace';
@@ -1018,11 +1019,30 @@ function Board({ boardId }: { boardId: string }) {
     return <BoardSkeleton />;
   }
   
-  const orderedColumns = Object.values(columns).sort((a,b) => a.order - b.order);
+  const filteredColumns = Object.fromEntries(
+    Object.entries(columns).map(([columnId, column]) => [
+        columnId,
+        {
+            ...column,
+            items: column.items.filter(item => item.content.toLowerCase().includes(searchTerm.toLowerCase()))
+        }
+    ])
+  );
+
+  const orderedColumns = Object.values(filteredColumns).sort((a,b) => a.order - b.order);
 
   return (
       <>
-        <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center justify-between mb-4">
+             <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Search tasks..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 w-64"
+                />
+            </div>
             <BoardMembersDialog boardMembers={boardMembers} />
         </div>
         {selectedTask && (
@@ -1189,3 +1209,4 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
 });
 
     
+
