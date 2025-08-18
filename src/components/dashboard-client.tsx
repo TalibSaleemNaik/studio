@@ -136,7 +136,8 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
         const workspaceRef = doc(db, `workspaces/${workspaceId}`);
         await setDoc(workspaceRef, { 
             name: "Default Workspace", 
-            ...( !doc(workspaceRef).id ? { ownerId: user.uid, createdAt: serverTimestamp() } : {} )
+            ownerId: user.uid,
+            members: { [user.uid]: 'owner' }
         }, { merge: true });
     } catch(e) {
         console.error("Error ensuring workspace exists:", e);

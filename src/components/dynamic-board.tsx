@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove, getDoc, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -53,10 +53,14 @@ interface Columns {
   [key: string]: Column;
 }
 
-interface BoardMember {
-  uid: string;
-  displayName: string;
-  photoURL: string;
+interface UserProfile {
+    uid: string;
+    displayName: string;
+    photoURL: string;
+    email: string;
+}
+
+interface BoardMember extends UserProfile {
   role: 'owner' | 'editor' | 'viewer';
 }
 
@@ -617,7 +621,7 @@ function BoardMembersDialog({ boardMembers }: { boardMembers: BoardMember[] }) {
                                     </Avatar>
                                     <div>
                                         <p className="font-semibold">{member.displayName}</p>
-                                        <p className="text-sm text-muted-foreground">{member.uid}</p>
+                                        <p className="text-sm text-muted-foreground">{member.email}</p>
                                     </div>
                                 </div>
                                 <Select value={member.role}>
@@ -625,6 +629,7 @@ function BoardMembersDialog({ boardMembers }: { boardMembers: BoardMember[] }) {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="owner">Owner</SelectItem>
                                         <SelectItem value="editor">Editor</SelectItem>
                                         <SelectItem value="viewer">Viewer</SelectItem>
                                     </SelectContent>
@@ -656,40 +661,37 @@ function Board({ boardId }: { boardId: string }) {
 
     setLoading(true);
     
-    // Fetch Board Members
-    // Note: In a real app, you would have a more scalable way to get user details
-    // than fetching each user doc individually.
+    // Fetch Board Members and listen for changes
     const unsubscribeMembers = onSnapshot(doc(db, `workspaces/${workspaceId}/boards`, boardId), async (boardSnap) => {
         const boardData = boardSnap.data();
         if (boardData && boardData.members) {
-            const memberPromises = Object.keys(boardData.members).map(uid => 
-                onSnapshot(doc(db, 'users', uid), userSnap => {
-                    if (userSnap.exists()) {
-                        const userData = userSnap.data();
-                        return {
-                            uid: userSnap.id,
-                            displayName: userData.displayName,
-                            photoURL: userData.photoURL,
-                            role: boardData.members[uid]
-                        } as BoardMember;
-                    }
-                    return null;
-                })
-            );
-            // This is not ideal as it creates multiple listeners.
-            // A better approach would be a backend function or a more structured user query.
-            // For now, we will just listen to the owner.
-             onSnapshot(doc(db, 'users', boardData.ownerId), (ownerSnap) => {
-                if (ownerSnap.exists()) {
-                    const ownerData = ownerSnap.data();
-                    setBoardMembers([{
-                        uid: ownerSnap.id,
-                        displayName: ownerData.displayName,
-                        photoURL: ownerData.photoURL,
-                        role: 'owner'
-                    }]);
+            try {
+                const memberUIDs = Object.keys(boardData.members);
+                if (memberUIDs.length === 0) {
+                    setBoardMembers([]);
+                    return;
                 }
-             });
+
+                const userDocs = await Promise.all(memberUIDs.map(uid => getDoc(doc(db, 'users', uid))));
+                
+                const membersData: BoardMember[] = userDocs
+                    .filter(docSnap => docSnap.exists())
+                    .map(docSnap => {
+                        const userData = docSnap.data() as Omit<UserProfile, 'uid'>;
+                        return {
+                            ...userData,
+                            uid: docSnap.id,
+                            role: boardData.members[docSnap.id],
+                        }
+                    });
+
+                setBoardMembers(membersData);
+            } catch (error) {
+                console.error("Error fetching board members:", error);
+                toast({ variant: 'destructive', title: 'Error loading board members' });
+            }
+        } else {
+             setBoardMembers([]);
         }
     });
 
@@ -741,7 +743,7 @@ function Board({ boardId }: { boardId: string }) {
         unsubscribeMembers();
     }
 
-  }, [user, boardId, workspaceId]);
+  }, [user, boardId, workspaceId, toast]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, type } = result;
@@ -778,14 +780,16 @@ function Board({ boardId }: { boardId: string }) {
     const newColumns = { ...columns };
     const batch = writeBatch(db);
 
+    // Update the local state optimistically
+    const optimisticColumns = { ...columns };
+
     if (sourceColId === destColId) {
       sourceItems.splice(destination.index, 0, removed);
       newColumns[sourceColId] = { ...startColumn, items: sourceItems };
       
       sourceItems.forEach((item, index) => {
-        if(item.order !== index) {
-            batch.update(doc(db, `workspaces/${workspaceId}/tasks`, item.id), { order: index });
-        }
+        const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, item.id);
+        batch.update(taskRef, { order: index });
       });
 
     } else {
@@ -795,25 +799,28 @@ function Board({ boardId }: { boardId: string }) {
       newColumns[sourceColId] = { ...startColumn, items: sourceItems };
       newColumns[destColId] = { ...endColumn, items: destItems };
       
-      batch.update(doc(db, `workspaces/${workspaceId}/tasks`, removed.id), {
-        groupId: destColId,
-        order: destination.index, 
-      });
+      const movedTaskRef = doc(db, `workspaces/${workspaceId}/tasks`, removed.id);
+      batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
 
       sourceItems.forEach((item, index) => {
-         if(item.order !== index) {
-            batch.update(doc(db, `workspaces/${workspaceId}/tasks`, item.id), { order: index });
-        }
+        const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, item.id);
+        batch.update(taskRef, { order: index });
       });
       destItems.forEach((item, index) => {
-        if(item.order !== index) {
-            batch.update(doc(db, `workspaces/${workspaceId}/tasks`, item.id), { order: index });
-        }
+         const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, item.id);
+         batch.update(taskRef, { order: index });
       });
     }
 
     setColumns(newColumns);
-    await batch.commit();
+    try {
+        await batch.commit();
+    } catch (error) {
+        console.error("Failed to reorder tasks:", error);
+        toast({ variant: 'destructive', title: 'Failed to save new order' });
+        // Revert to original state on failure
+        setColumns(columns);
+    }
   };
   
   const handleDeleteTask = async (taskId: string) => {
@@ -924,11 +931,15 @@ function Board({ boardId }: { boardId: string }) {
                                                                     })()}
                                                                 </div>
                                                                 <div className="flex -space-x-2 overflow-hidden">
-                                                                    {item.assignees?.map(uid => (
-                                                                        <Avatar key={uid} className="h-6 w-6 border-2 border-card">
-                                                                            <AvatarFallback>{boardMembers.find(m => m.uid === uid)?.displayName?.charAt(0) || '?'}</AvatarFallback>
-                                                                        </Avatar>
-                                                                    ))}
+                                                                    {item.assignees?.map(uid => {
+                                                                        const member = boardMembers.find(m => m.uid === uid);
+                                                                        return (
+                                                                            <Avatar key={uid} className="h-6 w-6 border-2 border-card">
+                                                                                <AvatarImage src={member?.photoURL} />
+                                                                                <AvatarFallback>{member?.displayName?.charAt(0) || '?'}</AvatarFallback>
+                                                                            </Avatar>
+                                                                        )
+                                                                    })}
                                                                 </div>
                                                             </div>
                                                         </div>
