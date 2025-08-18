@@ -4,15 +4,15 @@
 import React, from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, CalendarIcon, Flag, Sparkles, AlertTriangle } from 'lucide-react';
+import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, CalendarIcon, Flag, Sparkles, AlertTriangle, XIcon, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -25,6 +25,7 @@ import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { suggestTaskTags } from '@/ai/flows/suggest-task-tags';
 import { Badge } from './ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 interface Task {
   id: string;
@@ -35,6 +36,7 @@ interface Task {
   dueDate?: any; // Firestore timestamp or JS Date
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   tags?: string[];
+  assignees?: string[]; // Array of user UIDs
 }
 
 interface Column {
@@ -59,6 +61,7 @@ const priorityConfig = {
 function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }: { task: Task | null; workspaceId: string; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
+    const [newTag, setNewTag] = React.useState("");
     const { toast } = useToast();
     
     React.useEffect(() => {
@@ -89,11 +92,9 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
 
     const getDisplayDate = () => {
         if (!editedTask.dueDate) return null;
-        // Check if it's a Firestore Timestamp
         if (typeof editedTask.dueDate.toDate === 'function') {
             return editedTask.dueDate.toDate(); 
         }
-        // Otherwise, it's already a JS Date
         return editedTask.dueDate; 
     }
 
@@ -110,7 +111,9 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
                 description: editedTask.description,
             });
             if (result.suggestedTags) {
-                handleUpdate('tags', Array.from(new Set([...(editedTask.tags || []), ...result.suggestedTags])));
+                const currentTags = editedTask.tags || [];
+                const newTags = Array.from(new Set([...currentTags, ...result.suggestedTags]));
+                handleUpdate('tags', newTags);
             }
         } catch (error) {
             console.error("Failed to generate tags:", error);
@@ -119,6 +122,28 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
             setIsGeneratingTags(false);
         }
     }
+
+    const handleAddTag = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && newTag.trim() && task) {
+            e.preventDefault();
+            const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, task.id);
+            await updateDoc(taskRef, {
+                tags: arrayUnion(newTag.trim())
+            });
+            // Firestore listener will update the state
+            setNewTag("");
+        }
+    };
+
+    const handleRemoveTag = async (tagToRemove: string) => {
+        if (!task) return;
+        const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, task.id);
+        await updateDoc(taskRef, {
+            tags: arrayRemove(tagToRemove)
+        });
+        // Firestore listener will update the state
+    };
+
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -219,9 +244,9 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
                             </div>
                         </div>
                         
-                        <div className="space-y-2">
+                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <Label>Tags</Label>
+                                <Label>Labels</Label>
                                 <Button variant="ghost" size="sm" onClick={handleGenerateTags} disabled={isGeneratingTags}>
                                     {isGeneratingTags ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
                                     AI Suggest
@@ -229,11 +254,34 @@ function TaskDetailsDrawer({ task, workspaceId, isOpen, onOpenChange, onDelete }
                             </div>
                              <div className="flex flex-wrap gap-2">
                                 {editedTask.tags?.map(tag => (
-                                    <Badge key={tag} variant="secondary">{tag}</Badge>
+                                    <Badge key={tag} variant="secondary" className="flex items-center gap-1">
+                                        {tag}
+                                        <button onClick={() => handleRemoveTag(tag)} className="rounded-full hover:bg-black/10">
+                                            <XIcon className="h-3 w-3" />
+                                        </button>
+                                    </Badge>
                                 ))}
-                                {(!editedTask.tags || editedTask.tags.length === 0) && (
-                                    <p className='text-sm text-muted-foreground'>No tags yet.</p>
-                                )}
+                            </div>
+                            <Input 
+                                placeholder="Add a label and press Enter..."
+                                value={newTag}
+                                onChange={(e) => setNewTag(e.target.value)}
+                                onKeyDown={handleAddTag}
+                            />
+                        </div>
+                        
+                        <div className="space-y-3">
+                            <Label>Assignees</Label>
+                             <div className="flex items-center gap-2">
+                                {editedTask.assignees?.map(uid => (
+                                    <Avatar key={uid} className="h-8 w-8">
+                                        {/* In a real app, you'd fetch user data based on UID */}
+                                        <AvatarFallback>{uid.charAt(0).toUpperCase()}</AvatarFallback>
+                                    </Avatar>
+                                ))}
+                                <Button variant="outline" size="icon" className="rounded-full">
+                                    <UserPlus className="h-4 w-4" />
+                                </Button>
                             </div>
                         </div>
 
@@ -515,6 +563,9 @@ function Board({ boardId }: { boardId: string }) {
     );
 
     const unsubscribeGroups = onSnapshot(groupsQuery, (querySnapshot) => {
+      if (querySnapshot.empty && boardId) {
+        // This case can be handled by the create board logic, maybe show a special empty state here.
+      }
       const groupsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
       
       const tasksQuery = query(
@@ -730,7 +781,13 @@ function Board({ boardId }: { boardId: string }) {
                                                                         return <Icon className={cn('h-4 w-4', color)} />;
                                                                     })()}
                                                                 </div>
-                                                                {/* Placeholder for Assignee Avatar */}
+                                                                <div className="flex -space-x-2 overflow-hidden">
+                                                                    {item.assignees?.map(uid => (
+                                                                        <Avatar key={uid} className="h-6 w-6 border-2 border-card">
+                                                                            <AvatarFallback>{uid.charAt(0).toUpperCase()}</AvatarFallback>
+                                                                        </Avatar>
+                                                                    ))}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     )}
@@ -796,3 +853,4 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
