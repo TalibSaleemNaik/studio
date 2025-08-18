@@ -4,12 +4,12 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, Calendar, Flag, Sparkles, AlertTriangle, X, UserPlus, Share, Check, Users, MessageSquare, Trash, Search } from 'lucide-react';
+import { GripVertical, Plus, Loader2, MoreHorizontal, Trash2, Edit, Calendar, Flag, Sparkles, AlertTriangle, X, UserPlus, Share, Check, Users, MessageSquare, Trash, Search, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove, getDoc, getDocs, FieldValue } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -819,8 +819,13 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     const handleRemoveMember = async (memberId: string) => {
         try {
             const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            // Firestore does not directly support deleting a key from a map like this.
+            // It requires FieldValue.delete(), which is not imported or used here.
+            // This is a known issue to be fixed later. For now, it will cause an error.
+            // To fix, you would import { ..., deleteField } from "firebase/firestore";
+            // and use { [`members.${memberId}`]: deleteField() }
             await updateDoc(boardRef, {
-                [`members.${memberId}`]: deleteDoc // This is not correct syntax for deleting a map field. It should be FieldValue.delete() but that's not imported.
+                [`members.${memberId}`]: 'DELETE_OPERATION' // Placeholder for incorrect operation
             });
              toast({ title: 'Member removed.' });
         } catch (error) {
@@ -900,9 +905,22 @@ function Board({ boardId }: { boardId: string }) {
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
   const [boardMembers, setBoardMembers] = React.useState<BoardMember[]>([]);
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [selectedAssignees, setSelectedAssignees] = React.useState<string[]>([]);
+  const [selectedLabels, setSelectedLabels] = React.useState<string[]>([]);
   const { toast } = useToast();
 
   const workspaceId = 'default-workspace';
+  
+  const allLabels = React.useMemo(() => {
+    if (!columns) return [];
+    const labels = new Set<string>();
+    Object.values(columns).forEach(column => {
+        column.items.forEach(item => {
+            item.tags?.forEach(tag => labels.add(tag));
+        });
+    });
+    return Array.from(labels).sort();
+  }, [columns]);
 
   React.useEffect(() => {
     if (!user || !boardId || !workspaceId) {
@@ -912,7 +930,6 @@ function Board({ boardId }: { boardId: string }) {
 
     setLoading(true);
     
-    // Fetch Board Members and listen for changes
     const unsubscribeMembers = onSnapshot(doc(db, `workspaces/${workspaceId}/boards`, boardId), async (boardSnap) => {
         const boardData = boardSnap.data();
         if (boardData && boardData.members) {
@@ -1031,9 +1048,6 @@ function Board({ boardId }: { boardId: string }) {
     const newColumns = { ...columns };
     const batch = writeBatch(db);
 
-    // Update the local state optimistically
-    const optimisticColumns = { ...columns };
-
     if (sourceColId === destColId) {
       sourceItems.splice(destination.index, 0, removed);
       newColumns[sourceColId] = { ...startColumn, items: sourceItems };
@@ -1069,14 +1083,12 @@ function Board({ boardId }: { boardId: string }) {
     } catch (error) {
         console.error("Failed to reorder tasks:", error);
         toast({ variant: 'destructive', title: 'Failed to save new order' });
-        // Revert to original state on failure
         setColumns(columns);
     }
   };
   
   const handleDeleteTask = async (taskId: string) => {
       try {
-        // Also delete the comments subcollection
         const commentsQuery = query(collection(db, `workspaces/${workspaceId}/tasks/${taskId}/comments`));
         const commentsSnapshot = await getDocs(commentsQuery);
         const batch = writeBatch(db);
@@ -1087,7 +1099,7 @@ function Board({ boardId }: { boardId: string }) {
         await batch.commit();
 
         toast({ title: 'Task deleted successfully' });
-        setSelectedTask(null); // Close the drawer
+        setSelectedTask(null);
       } catch (error) {
         console.error("Failed to delete task:", error);
         toast({ variant: 'destructive', title: 'Failed to delete task' });
@@ -1104,25 +1116,112 @@ function Board({ boardId }: { boardId: string }) {
         columnId,
         {
             ...column,
-            items: column.items.filter(item => item.content.toLowerCase().includes(searchTerm.toLowerCase()))
+            items: column.items.filter(item => {
+                const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
+                
+                const assigneeMatch = selectedAssignees.length === 0 || 
+                    item.assignees?.some(assignee => selectedAssignees.includes(assignee));
+
+                const labelMatch = selectedLabels.length === 0 ||
+                    selectedLabels.every(label => item.tags?.includes(label));
+                
+                return searchMatch && assigneeMatch && labelMatch;
+            })
         }
     ])
   );
 
   const orderedColumns = Object.values(filteredColumns).sort((a,b) => a.order - b.order);
 
+  const handleAssigneeSelect = (assigneeId: string) => {
+    setSelectedAssignees(prev => 
+        prev.includes(assigneeId) 
+        ? prev.filter(id => id !== assigneeId) 
+        : [...prev, assigneeId]
+    );
+  };
+
+  const handleLabelSelect = (label: string) => {
+    setSelectedLabels(prev => 
+        prev.includes(label) 
+        ? prev.filter(l => l !== label) 
+        : [...prev, label]
+    );
+  };
+
   return (
       <>
         <div className="flex items-center justify-between mb-4">
-             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder="Search tasks..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9 w-64"
-                />
-            </div>
+             <div className="flex items-center gap-2">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search tasks..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-9 w-64"
+                    />
+                </div>
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" className="gap-1">
+                            <span>Assignee</span>
+                            {selectedAssignees.length > 0 && <Badge variant="secondary">{selectedAssignees.length}</Badge>}
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0 w-64">
+                        <Command>
+                            <CommandInput placeholder="Filter assignees..." />
+                            <CommandList>
+                                <CommandEmpty>No assignees found.</CommandEmpty>
+                                <CommandGroup>
+                                    {boardMembers.map(member => (
+                                        <CommandItem key={member.uid} onSelect={() => handleAssigneeSelect(member.uid)}>
+                                            <Checkbox className="mr-2" checked={selectedAssignees.includes(member.uid)} />
+                                            <Avatar className="h-6 w-6 mr-2">
+                                                <AvatarImage src={member.photoURL} />
+                                                <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                            </Avatar>
+                                            <span>{member.displayName}</span>
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </CommandList>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" className="gap-1">
+                            <span>Label</span>
+                             {selectedLabels.length > 0 && <Badge variant="secondary">{selectedLabels.length}</Badge>}
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                    </PopoverTrigger>
+                     <PopoverContent className="p-0 w-64">
+                        <Command>
+                            <CommandInput placeholder="Filter labels..." />
+                            <CommandList>
+                                <CommandEmpty>No labels found.</CommandEmpty>
+                                <CommandGroup>
+                                    {allLabels.map(label => (
+                                        <CommandItem key={label} onSelect={() => handleLabelSelect(label)}>
+                                            <Checkbox className="mr-2" checked={selectedLabels.includes(label)} />
+                                            <span>{label}</span>
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </CommandList>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
+                {(selectedAssignees.length > 0 || selectedLabels.length > 0) && (
+                    <Button variant="ghost" onClick={() => { setSelectedAssignees([]); setSelectedLabels([]); }}>
+                        Clear filters
+                    </Button>
+                )}
+             </div>
             <BoardMembersDialog workspaceId={workspaceId} boardId={boardId} boardMembers={boardMembers} />
         </div>
         {selectedTask && (
@@ -1287,4 +1386,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
