@@ -92,9 +92,7 @@ const priorityConfig = {
 };
 
 
-function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task | null; workspaceId: string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
-    if (!task) return null;
-
+function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task; workspaceId: string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
     const { user } = useAuth();
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
@@ -104,6 +102,12 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
     const [isPostingComment, setIsPostingComment] = React.useState(false);
     const [newChecklistItem, setNewChecklistItem] = React.useState("");
     const { toast } = useToast();
+    
+    const checklistProgress = React.useMemo(() => {
+        if (!editedTask.checklist || editedTask.checklist.length === 0) return 0;
+        const completedCount = editedTask.checklist.filter(item => item.completed).length;
+        return (completedCount / editedTask.checklist.length) * 100;
+    }, [editedTask.checklist]);
     
     React.useEffect(() => {
         setEditedTask(task);
@@ -119,12 +123,6 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
             return () => unsubscribe();
         }
     }, [task, workspaceId]);
-    
-    const checklistProgress = React.useMemo(() => {
-        if (!editedTask.checklist || editedTask.checklist.length === 0) return 0;
-        const completedCount = editedTask.checklist.filter(item => item.completed).length;
-        return (completedCount / editedTask.checklist.length) * 100;
-    }, [editedTask.checklist]);
 
     const handleUpdate = async (field: keyof Task, value: any) => {
         if (!task) return;
@@ -1027,14 +1025,16 @@ function Board({ boardId }: { boardId: string }) {
         <div className="flex items-center justify-end mb-4">
             <BoardMembersDialog boardMembers={boardMembers} />
         </div>
-        <TaskDetailsDrawer 
-            task={selectedTask} 
-            workspaceId={workspaceId}
-            boardMembers={boardMembers}
-            isOpen={!!selectedTask} 
-            onOpenChange={(open) => !open && setSelectedTask(null)} 
-            onDelete={handleDeleteTask}
-        />
+        {selectedTask && (
+            <TaskDetailsDrawer 
+                task={selectedTask} 
+                workspaceId={workspaceId}
+                boardMembers={boardMembers}
+                isOpen={!!selectedTask} 
+                onOpenChange={(open) => !open && setSelectedTask(null)} 
+                onDelete={handleDeleteTask}
+            />
+        )}
         <DragDropContext onDragEnd={onDragEnd}>
             <Droppable droppableId="board" type="COLUMN" direction="horizontal">
             {(provided) => (
