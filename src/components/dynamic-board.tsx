@@ -93,6 +93,8 @@ const priorityConfig = {
 
 
 function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task | null; workspaceId: string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
+    if (!task) return null;
+
     const { user } = useAuth();
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
@@ -118,7 +120,11 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
         }
     }, [task, workspaceId]);
     
-    if (!editedTask) return null;
+    const checklistProgress = React.useMemo(() => {
+        if (!editedTask.checklist || editedTask.checklist.length === 0) return 0;
+        const completedCount = editedTask.checklist.filter(item => item.completed).length;
+        return (completedCount / editedTask.checklist.length) * 100;
+    }, [editedTask.checklist]);
 
     const handleUpdate = async (field: keyof Task, value: any) => {
         if (!task) return;
@@ -247,12 +253,6 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
         handleUpdate('checklist', newChecklist);
     };
     
-    const checklistProgress = React.useMemo(() => {
-        if (!editedTask.checklist || editedTask.checklist.length === 0) return 0;
-        const completedCount = editedTask.checklist.filter(item => item.completed).length;
-        return (completedCount / editedTask.checklist.length) * 100;
-    }, [editedTask.checklist]);
-
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
