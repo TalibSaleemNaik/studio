@@ -161,7 +161,6 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
                                         boardId={boardId}
                                         groupId={column.id}
                                         columnItemCount={column.items.length}
-                                        onTaskCreated={() => { }}
                                     />
                                 </div>
                             )}
@@ -172,3 +171,5 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
         </Draggable>
     );
 }
+
+    

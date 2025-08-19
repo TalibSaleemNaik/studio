@@ -464,12 +464,9 @@ function Board({ boardId }: { boardId: string }) {
                                     {allLabels.map(label => (
                                         <CommandItem 
                                             key={label}
-                                            onSelect={(e) => {
-                                                handleLabelSelect(label);
-                                            }}
-                                            className="cursor-pointer"
+                                            onSelect={() => handleLabelSelect(label)}
                                         >
-                                            <Checkbox className="mr-2" checked={selectedLabels.includes(label)} />
+                                            <Checkbox className="mr-2 pointer-events-none" checked={selectedLabels.includes(label)} />
                                             <span>{label}</span>
                                         </CommandItem>
                                     ))}
@@ -484,7 +481,14 @@ function Board({ boardId }: { boardId: string }) {
                     </Button>
                 )}
              </div>
-            <BoardMembersDialog workspaceId={workspaceId} boardId={boardId} boardMembers={boardMembers} />
+            <div className="flex items-center gap-2">
+                <BoardMembersDialog workspaceId={workspaceId} boardId={boardId} boardMembers={boardMembers} />
+                <CreateGroupDialog 
+                    workspaceId={workspaceId}
+                    boardId={boardId}
+                    columnCount={orderedColumns.length}
+                />
+            </div>
         </div>
         {selectedTask && (
             <TaskDetailsDrawer 
@@ -516,13 +520,6 @@ function Board({ boardId }: { boardId: string }) {
                     />
                 ))}
                 {provided.placeholder}
-                <div className="shrink-0 w-80">
-                    <CreateGroupDialog 
-                        workspaceId={workspaceId}
-                        boardId={boardId}
-                        columnCount={orderedColumns.length}
-                    />
-                </div>
                 </div>
             )}
             </Droppable>
@@ -557,3 +554,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
