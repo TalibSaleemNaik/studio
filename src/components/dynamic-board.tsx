@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove, getDoc, getDocs, FieldValue } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, addDoc, serverTimestamp, writeBatch, deleteDoc, arrayUnion, arrayRemove, getDoc, getDocs, deleteField } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -776,6 +776,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
 
             if (querySnapshot.empty) {
                 toast({ variant: 'destructive', title: 'User not found.' });
+                setIsInviting(false);
                 return;
             }
 
@@ -784,6 +785,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
 
             if (boardMembers.some(member => member.uid === userId)) {
                 toast({ variant: 'destructive', title: 'User is already a member of this board.' });
+                setIsInviting(false);
                 return;
             }
 
@@ -803,7 +805,8 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
         }
     };
     
-    const handleRoleChange = async (memberId: string, newRole: 'editor' | 'viewer') => {
+    const handleRoleChange = async (memberId: string, newRole: 'editor' | 'viewer' | 'owner') => {
+        if (newRole === 'owner') return; // Should have a separate "transfer ownership" flow
         try {
             const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
             await updateDoc(boardRef, {
@@ -819,13 +822,8 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     const handleRemoveMember = async (memberId: string) => {
         try {
             const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
-            // Firestore does not directly support deleting a key from a map like this.
-            // It requires FieldValue.delete(), which is not imported or used here.
-            // This is a known issue to be fixed later. For now, it will cause an error.
-            // To fix, you would import { ..., deleteField } from "firebase/firestore";
-            // and use { [`members.${memberId}`]: deleteField() }
             await updateDoc(boardRef, {
-                [`members.${memberId}`]: 'DELETE_OPERATION' // Placeholder for incorrect operation
+                [`members.${memberId}`]: deleteField()
             });
              toast({ title: 'Member removed.' });
         } catch (error) {
@@ -875,20 +873,27 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
                                         <p className="text-sm text-muted-foreground">{member.email}</p>
                                     </div>
                                 </div>
-                                <Select 
-                                    value={member.role}
-                                    onValueChange={(value) => handleRoleChange(member.uid, value as 'editor' | 'viewer')}
-                                    disabled={member.role === 'owner'}
-                                >
-                                    <SelectTrigger className="w-[110px]">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="owner">Owner</SelectItem>
-                                        <SelectItem value="editor">Editor</SelectItem>
-                                        <SelectItem value="viewer">Viewer</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                {member.role !== 'owner' ? (
+                                    <div className="flex items-center gap-2">
+                                        <Select 
+                                            value={member.role}
+                                            onValueChange={(value) => handleRoleChange(member.uid, value as 'editor' | 'viewer')}
+                                        >
+                                            <SelectTrigger className="w-[110px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="editor">Editor</SelectItem>
+                                                <SelectItem value="viewer">Viewer</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveMember(member.uid)}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <span className="text-sm text-muted-foreground pr-4">Owner</span>
+                                )}
                             </div>
                         ))}
                     </div>
