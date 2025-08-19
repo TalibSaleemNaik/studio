@@ -1211,9 +1211,16 @@ function Board({ boardId }: { boardId: string }) {
                                 <CommandEmpty>No labels found.</CommandEmpty>
                                 <CommandGroup>
                                     {allLabels.map(label => (
-                                        <CommandItem key={label} onSelect={() => handleLabelSelect(label)}>
+                                        <CommandItem 
+                                            key={label}
+                                            onSelect={(e) => {
+                                                handleLabelSelect(label);
+                                            }}
+                                        >
+                                          <div onClick={(e) => { e.stopPropagation(); handleLabelSelect(label); }} className="flex items-center w-full">
                                             <Checkbox className="mr-2" checked={selectedLabels.includes(label)} />
                                             <span>{label}</span>
+                                          </div>
                                         </CommandItem>
                                     ))}
                                 </CommandGroup>
