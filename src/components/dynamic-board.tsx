@@ -426,7 +426,7 @@ function Board({ boardId }: { boardId: string }) {
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="p-0 w-64">
+                    <PopoverContent className="p-0 w-64" onMouseDown={(e) => e.stopPropagation()}>
                         <Command>
                             <CommandInput placeholder="Filter assignees..." />
                             <CommandList>
@@ -455,7 +455,7 @@ function Board({ boardId }: { boardId: string }) {
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     </PopoverTrigger>
-                     <PopoverContent className="p-0 w-64">
+                     <PopoverContent className="p-0 w-64" onMouseDown={(e) => e.stopPropagation()}>
                         <Command>
                             <CommandInput placeholder="Filter labels..." />
                             <CommandList>
@@ -468,9 +468,8 @@ function Board({ boardId }: { boardId: string }) {
                                             className="cursor-pointer"
                                         >
                                             <Checkbox 
-                                              className="mr-2" 
+                                              className="mr-2 pointer-events-none" 
                                               checked={selectedLabels.includes(label)} 
-                                              onCheckedChange={() => handleLabelSelect(label)}
                                             />
                                             <span>{label}</span>
                                         </CommandItem>
