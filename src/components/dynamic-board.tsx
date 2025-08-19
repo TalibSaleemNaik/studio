@@ -1213,7 +1213,7 @@ function Board({ boardId }: { boardId: string }) {
                                     {allLabels.map(label => (
                                         <CommandItem 
                                             key={label}
-                                            onClick={() => handleLabelSelect(label)}
+                                            onSelect={() => handleLabelSelect(label)}
                                         >
                                             <Checkbox className="mr-2" checked={selectedLabels.includes(label)} />
                                             <span>{label}</span>
