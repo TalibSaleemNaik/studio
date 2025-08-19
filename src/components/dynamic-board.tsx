@@ -464,9 +464,12 @@ function Board({ boardId }: { boardId: string }) {
                                     {allLabels.map(label => (
                                         <CommandItem 
                                             key={label}
-                                            onSelect={() => handleLabelSelect(label)}
+                                            onSelect={(e) => {
+                                                handleLabelSelect(label);
+                                            }}
+                                            className="cursor-pointer"
                                         >
-                                            <Checkbox className="mr-2 pointer-events-none" checked={selectedLabels.includes(label)} />
+                                            <Checkbox className="mr-2" checked={selectedLabels.includes(label)} />
                                             <span>{label}</span>
                                         </CommandItem>
                                     ))}
