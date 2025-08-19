@@ -426,15 +426,25 @@ function Board({ boardId }: { boardId: string }) {
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="p-0 w-64" onMouseDown={(e) => e.stopPropagation()}>
+                    <PopoverContent 
+                        className="p-0 w-64 z-50 pointer-events-auto"
+                        onPointerDownCapture={(e) => e.stopPropagation()}
+                        onMouseDownCapture={(e) => e.stopPropagation()}
+                        onTouchStartCapture={(e) => e.stopPropagation()}
+                        >
                         <Command>
                             <CommandInput placeholder="Filter assignees..." />
                             <CommandList>
                                 <CommandEmpty>No assignees found.</CommandEmpty>
                                 <CommandGroup>
                                     {boardMembers.map(member => (
-                                        <CommandItem key={member.uid} onSelect={() => handleAssigneeSelect(member.uid)}>
-                                            <Checkbox className="mr-2" checked={selectedAssignees.includes(member.uid)} />
+                                        <CommandItem 
+                                            key={member.uid} 
+                                            value={member.uid}
+                                            onSelect={() => handleAssigneeSelect(member.uid)}
+                                            className="cursor-pointer"
+                                        >
+                                            <Checkbox className="mr-2 pointer-events-none" checked={selectedAssignees.includes(member.uid)} />
                                             <Avatar className="h-6 w-6 mr-2">
                                                 <AvatarImage src={member.photoURL} />
                                                 <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
@@ -455,7 +465,12 @@ function Board({ boardId }: { boardId: string }) {
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     </PopoverTrigger>
-                     <PopoverContent className="p-0 w-64" onMouseDown={(e) => e.stopPropagation()}>
+                     <PopoverContent 
+                        className="p-0 w-64 z-50 pointer-events-auto"
+                        onPointerDownCapture={(e) => e.stopPropagation()}
+                        onMouseDownCapture={(e) => e.stopPropagation()}
+                        onTouchStartCapture={(e) => e.stopPropagation()}
+                        >
                         <Command>
                             <CommandInput placeholder="Filter labels..." />
                             <CommandList>
@@ -464,11 +479,12 @@ function Board({ boardId }: { boardId: string }) {
                                     {allLabels.map(label => (
                                         <CommandItem 
                                             key={label}
+                                            value={label}
                                             onSelect={() => handleLabelSelect(label)}
                                             className="cursor-pointer"
                                         >
                                             <Checkbox 
-                                              className="mr-2 pointer-events-none" 
+                                              className="mr-2 pointer-events-none"
                                               checked={selectedLabels.includes(label)} 
                                             />
                                             <span>{label}</span>
@@ -558,5 +574,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
