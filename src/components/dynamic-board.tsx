@@ -427,10 +427,7 @@ function Board({ boardId }: { boardId: string }) {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent 
-                        className="p-0 w-64 z-50 pointer-events-auto"
-                        onPointerDownCapture={(e) => e.stopPropagation()}
-                        onMouseDownCapture={(e) => e.stopPropagation()}
-                        onTouchStartCapture={(e) => e.stopPropagation()}
+                        className="p-0 w-64"
                         >
                         <Command>
                             <CommandInput placeholder="Filter assignees..." />
@@ -441,10 +438,11 @@ function Board({ boardId }: { boardId: string }) {
                                         <CommandItem 
                                             key={member.uid} 
                                             value={member.uid}
+                                            disabled={false}
                                             onSelect={() => handleAssigneeSelect(member.uid)}
                                             className="cursor-pointer"
                                         >
-                                            <Checkbox className="mr-2 pointer-events-none" checked={selectedAssignees.includes(member.uid)} />
+                                            <Checkbox className="mr-2" checked={selectedAssignees.includes(member.uid)} />
                                             <Avatar className="h-6 w-6 mr-2">
                                                 <AvatarImage src={member.photoURL} />
                                                 <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
@@ -466,10 +464,7 @@ function Board({ boardId }: { boardId: string }) {
                         </Button>
                     </PopoverTrigger>
                      <PopoverContent 
-                        className="p-0 w-64 z-50 pointer-events-auto"
-                        onPointerDownCapture={(e) => e.stopPropagation()}
-                        onMouseDownCapture={(e) => e.stopPropagation()}
-                        onTouchStartCapture={(e) => e.stopPropagation()}
+                        className="p-0 w-64"
                         >
                         <Command>
                             <CommandInput placeholder="Filter labels..." />
@@ -480,11 +475,12 @@ function Board({ boardId }: { boardId: string }) {
                                         <CommandItem 
                                             key={label}
                                             value={label}
+                                            disabled={false}
                                             onSelect={() => handleLabelSelect(label)}
                                             className="cursor-pointer"
                                         >
                                             <Checkbox 
-                                              className="mr-2 pointer-events-none"
+                                              className="mr-2"
                                               checked={selectedLabels.includes(label)} 
                                             />
                                             <span>{label}</span>
