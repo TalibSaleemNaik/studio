@@ -101,7 +101,6 @@ function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChan
     const [newComment, setNewComment] = React.useState("");
     const [isPostingComment, setIsPostingComment] = React.useState(false);
     const [newChecklistItem, setNewChecklistItem] = React.useState("");
-    const { toast } = useToast();
     
     const checklistProgress = React.useMemo(() => {
         if (!editedTask.checklist || editedTask.checklist.length === 0) return 0;
@@ -1215,7 +1214,7 @@ function Board({ boardId }: { boardId: string }) {
                                             key={label}
                                             onSelect={() => handleLabelSelect(label)}
                                         >
-                                            <Checkbox className="mr-2" checked={selectedLabels.includes(label)} />
+                                            <Checkbox className="mr-2 pointer-events-none" checked={selectedLabels.includes(label)} />
                                             <span>{label}</span>
                                         </CommandItem>
                                     ))}
