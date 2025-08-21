@@ -31,6 +31,7 @@ import { Task, ChecklistItem, Comment, BoardMember, Attachment } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
+import { createNotification } from '@/lib/notification-service';
 
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
@@ -200,7 +201,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         handleFieldUpdate('tags', arrayRemove(tagToRemove), `removed label "${tagToRemove}" from task "${editedTask.content}".`);
     };
     
-    const toggleAssignee = (uid: string) => {
+    const toggleAssignee = async (uid: string) => {
         const member = boardMembers.find(m => m.uid === uid);
         if (!member || !user) return;
 
@@ -215,7 +216,15 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
             : `assigned ${member.displayName} to task "${editedTask.content}".`;
         
         setEditedTask({...editedTask, assignees: newAssignees});
-        handleFieldUpdate('assignees', newAssignees, logMessage);
+        await handleFieldUpdate('assignees', newAssignees, logMessage);
+
+        if (!isAssigned) {
+            await createNotification({
+                recipientId: uid,
+                message: `${user.displayName} assigned you to the task "${editedTask.content}".`,
+                link: `/board/${boardId}?taskId=${task.id}`,
+            });
+        }
     };
     
     const handlePostComment = async (e: React.FormEvent) => {
@@ -683,5 +692,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         </Sheet>
     );
 }
+
+    
 
     

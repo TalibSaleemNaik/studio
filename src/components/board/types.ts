@@ -37,7 +37,7 @@ export interface Column {
 }
 
 export interface Columns {
-  [key: string]: Column;
+  [key:string]: Column;
 }
 
 export interface UserProfile {
@@ -68,6 +68,14 @@ export interface Activity {
     authorPhotoURL: string;
     taskId?: string;
     timestamp: any; // Firestore Timestamp
+}
+
+export interface Notification {
+  id: string;
+  message: string;
+  link: string;
+  read: boolean;
+  createdAt: any; // Firestore Timestamp
 }
 
     
