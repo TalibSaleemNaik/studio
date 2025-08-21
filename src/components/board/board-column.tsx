@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Draggable, Droppable } from '@hello-pangea/dnd';
-import { GripVertical, MoreHorizontal, Plus, Edit, Trash2 } from 'lucide-react';
+import { GripVertical, MoreHorizontal, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, writeBatch, collection, getDocs, query } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
 import { Task, Column, BoardMember } from './types';
 import { TaskCard } from './task-card';
 import { CreateTaskDialog } from './create-task-dialog';
@@ -25,6 +25,7 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
     const [isRenameOpen, setIsRenameOpen] = React.useState(false);
     const [newName, setNewName] = React.useState(column.name);
     const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
+    const [isDeleting, setIsDeleting] = React.useState(false);
 
     const handleRename = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -42,6 +43,7 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
     }
 
     const handleDelete = async () => {
+        setIsDeleting(true);
         const batch = writeBatch(db);
         
         // Delete the group itself
@@ -49,18 +51,19 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
 
         // Delete all tasks within that group
         const tasksQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), where('groupId', '==', column.id));
-        const tasksSnapshot = await getDocs(tasksQuery);
-        tasksSnapshot.forEach(taskDoc => {
-            batch.delete(taskDoc.ref);
-        });
-
+        
         try {
+            const tasksSnapshot = await getDocs(tasksQuery);
+            tasksSnapshot.forEach(taskDoc => {
+                batch.delete(taskDoc.ref);
+            });
             await batch.commit();
             toast({ title: "List deleted" });
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Failed to delete list' });
         } finally {
+            setIsDeleting(false);
             setIsConfirmOpen(false);
         }
     }
@@ -108,8 +111,11 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Delete
+                            </AlertDialogAction>
                         </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

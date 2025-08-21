@@ -173,6 +173,7 @@ function Board({ boardId }: { boardId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
   const [boardMembers, setBoardMembers] = React.useState<BoardMember[]>([]);
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -192,28 +193,40 @@ function Board({ boardId }: { boardId: string }) {
     });
     return Array.from(labels).sort();
   }, [columns]);
-
+  
   React.useEffect(() => {
     if (!user || !boardId || !workspaceId) {
         setLoading(true);
         return;
     }
 
-    setLoading(true);
+    const boardRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}`);
     
-    const unsubscribeMembers = onSnapshot(doc(db, `workspaces/${workspaceId}/boards`, boardId), async (boardSnap) => {
-        const boardData = boardSnap.data();
-        if (boardData && boardData.members) {
-            try {
-                const memberUIDs = Object.keys(boardData.members);
-                if (memberUIDs.length === 0) {
-                    setBoardMembers([]);
-                    return;
-                }
+    // Main subscription to the board document to control access and get members
+    const unsubscribeBoard = onSnapshot(boardRef, async (boardSnap) => {
+        if (!boardSnap.exists()) {
+            setError("Board not found or you don't have access.");
+            setLoading(false);
+            return;
+        }
 
-                const userDocs = await Promise.all(memberUIDs.map(uid => getDoc(doc(db, 'users', uid))));
-                
-                const membersData: BoardMember[] = userDocs
+        const boardData = boardSnap.data();
+        const memberUIDs = Object.keys(boardData.members || {});
+        
+        // Security Check: Is the current user a member of this board?
+        if (!memberUIDs.includes(user.uid)) {
+            setError("You do not have permission to view this board.");
+            setLoading(false);
+            return;
+        }
+        
+        setError(null);
+
+        // Fetch profiles for all members
+        try {
+            if (memberUIDs.length > 0) {
+                 const userDocs = await Promise.all(memberUIDs.map(uid => getDoc(doc(db, 'users', uid))));
+                 const membersData: BoardMember[] = userDocs
                     .filter(docSnap => docSnap.exists())
                     .map(docSnap => {
                         const userData = docSnap.data() as Omit<BoardMember, 'uid' | 'role'>;
@@ -223,64 +236,70 @@ function Board({ boardId }: { boardId: string }) {
                             role: boardData.members[docSnap.id],
                         }
                     });
-
                 setBoardMembers(membersData);
-            } catch (error) {
-                console.error("Error fetching board members:", error);
-                toast({ variant: 'destructive', title: 'Error loading board members' });
+            } else {
+                 setBoardMembers([]);
             }
-        } else {
-             setBoardMembers([]);
-        }
-    });
-
-
-    const groupsQuery = query(
-      collection(db, `workspaces/${workspaceId}/boards/${boardId}/groups`),
-      orderBy('order')
-    );
-
-    const unsubscribeGroups = onSnapshot(groupsQuery, (querySnapshot) => {
-      const groupsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
-      
-      const tasksQuery = query(
-        collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`)
-      );
-
-      const unsubscribeTasks = onSnapshot(tasksQuery, (tasksSnapshot) => {
-        const tasksData = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<Task, 'id'> }));
-
-        const newColumns: Columns = {};
-        for (const group of groupsData) {
-          newColumns[group.id] = {
-            id: group.id,
-            name: group.name,
-            order: group.order,
-            items: tasksData
-              .filter(task => task.groupId === group.id)
-              .sort((a, b) => a.order - b.order),
-          };
+        } catch (e) {
+             console.error("Error fetching board members:", e);
+             toast({ variant: 'destructive', title: 'Error loading board members' });
         }
 
-        setColumns(newColumns);
-        setLoading(false);
-      }, (error) => {
-        console.error("Error fetching tasks:", error);
-        setLoading(false);
-      });
+        // Now that we've confirmed access, set up listeners for groups and tasks
+        const groupsQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/groups`), orderBy('order'));
+        const tasksQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`));
 
-      return () => unsubscribeTasks();
-    }, (error) => {
-        console.error("Error fetching groups:", error);
+        const unsubscribeGroups = onSnapshot(groupsQuery, (groupsSnapshot) => {
+             const groupsData = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
+             
+             // This nested subscription ensures we always have the latest groups when tasks are updated
+             const unsubscribeTasks = onSnapshot(tasksQuery, (tasksSnapshot) => {
+                 const tasksData = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<Task, 'id'> }));
+                 
+                 const newColumns: Columns = {};
+                 for (const group of groupsData) {
+                    newColumns[group.id] = {
+                        id: group.id,
+                        name: group.name,
+                        order: group.order,
+                        items: tasksData
+                            .filter(task => task.groupId === group.id)
+                            .sort((a, b) => a.order - b.order),
+                    };
+                 }
+                 setColumns(newColumns);
+                 setLoading(false);
+             }, (taskError) => {
+                 console.error("Error fetching tasks:", taskError);
+                 setError("Failed to load tasks.");
+                 setLoading(false);
+             });
+             
+             return () => unsubscribeTasks();
+        }, (groupError) => {
+            console.error("Error fetching groups:", groupError);
+            setError("Failed to load board columns.");
+            setLoading(false);
+        });
+
+        // Return a function to clean up the groups listener
+        return () => unsubscribeGroups();
+
+    }, (boardError) => {
+        console.error("Error fetching board:", boardError);
+        setError("An error occurred while fetching board data.");
+        if (boardError.code === 'permission-denied') {
+            setError("You do not have permission to view this board.");
+        }
         setLoading(false);
     });
 
     return () => {
-        unsubscribeGroups();
-        unsubscribeMembers();
-    }
+        unsubscribeBoard();
+        // Child unsubscribers are handled within their parent callbacks
+    };
+}, [user, boardId, workspaceId, toast]);
 
-  }, [user, boardId, workspaceId, toast]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, type } = result;
@@ -361,10 +380,22 @@ function Board({ boardId }: { boardId: string }) {
   }
 
 
-  if (loading || !columns) {
+  if (loading) {
     return <BoardSkeleton />;
   }
+
+  if (error) {
+    return (
+        <div className="flex items-center justify-center h-full text-center text-destructive">
+            <p>{error}</p>
+        </div>
+    );
+  }
   
+  if (!columns) {
+    return <BoardSkeleton />;
+  }
+
   const filteredColumns = Object.fromEntries(
     Object.entries(columns).map(([columnId, column]) => [
         columnId,
@@ -569,3 +600,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
