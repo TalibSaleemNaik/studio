@@ -42,10 +42,12 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
         setIsCreating(true);
         try {
             const batch = writeBatch(db);
+            const workspaceRef = doc(db, `workspaces/${workspaceId}`);
             const boardRef = doc(collection(db, `workspaces/${workspaceId}/boards`));
             
             const members = { [user.uid]: 'owner' };
 
+            // Set board data
             batch.set(boardRef, {
                 name: title,
                 description: description,
@@ -53,6 +55,14 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                 ownerId: user.uid,
                 members: members
             });
+
+            // IMPORTANT: Ensure user is also a member of the workspace
+            batch.set(workspaceRef, {
+                members: {
+                    [user.uid]: 'owner'
+                }
+            }, { merge: true });
+
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
@@ -224,3 +234,5 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
     </div>
   )
 }
+
+    
