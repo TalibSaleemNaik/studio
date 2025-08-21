@@ -23,7 +23,7 @@ import { Task, Columns, BoardMember } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
-import { logActivity } from '@/lib/activity-logger';
+import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
 
 function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceId: string, boardId: string, boardMembers: BoardMember[] }) {
@@ -69,7 +69,12 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
             });
             
             if (user) {
-                await logActivity(workspaceId, boardId, user, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
+                 const simpleUser: SimpleUser = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                };
+                await logActivity(workspaceId, boardId, simpleUser, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
             }
 
             toast({ title: 'User invited successfully!' });
@@ -106,7 +111,12 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
             });
 
             if (user && memberToRemove) {
-                 await logActivity(workspaceId, boardId, user, `removed ${memberToRemove.displayName} from the board.`);
+                 const simpleUser: SimpleUser = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                };
+                 await logActivity(workspaceId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
             }
 
              toast({ title: 'Member removed.' });
@@ -208,7 +218,12 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
             const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
             await updateDoc(boardRef, { name: boardName });
             if (user) {
-                 await logActivity(workspaceId, boardId, user, `renamed the board to "${boardName}" (from "${name}")`);
+                const simpleUser: SimpleUser = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                };
+                 await logActivity(workspaceId, boardId, simpleUser, `renamed the board to "${boardName}" (from "${name}")`);
             }
             toast({ title: 'Board name updated.' });
         } catch (error) {
@@ -387,6 +402,11 @@ function Board({ boardId }: { boardId: string }) {
     const { source, destination, type, draggableId } = result;
     if (!destination || !columns || !user) return;
 
+    const simpleUser: SimpleUser = {
+        uid: user.uid,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+    };
 
     if (type === 'COLUMN') {
         const orderedColumns = Object.values(columns).sort((a,b) => a.order - b.order);
@@ -438,7 +458,7 @@ function Board({ boardId }: { boardId: string }) {
       batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
       
       const task = columns[source.droppableId].items[source.index];
-      logActivity(workspaceId, boardId, user, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
+      logActivity(workspaceId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
 
       sourceItems.forEach((item, index) => {
         const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
@@ -712,7 +732,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
-
-    

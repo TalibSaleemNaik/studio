@@ -18,7 +18,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
-import { logActivity } from "@/lib/activity-logger";
+import { logActivity, SimpleUser } from "@/lib/activity-logger";
 
 interface Board {
   id: string;
@@ -77,7 +77,12 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
             
             await batch.commit();
 
-            await logActivity(workspaceId, boardRef.id, user, `created the board "${title}"`);
+            const simpleUser: SimpleUser = {
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+            };
+            await logActivity(workspaceId, boardRef.id, simpleUser, `created the board "${title}"`);
 
             toast({ title: "Board created successfully!" });
             setIsOpen(false);
@@ -323,5 +328,3 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
     </>
   )
 }
-
-    

@@ -30,8 +30,7 @@ import { format } from 'date-fns';
 import { Task, ChecklistItem, Comment, BoardMember, Attachment } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
-import { logActivity } from '@/lib/activity-logger';
-import type { User } from 'firebase/auth';
+import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
@@ -64,13 +63,12 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         return (completedCount / editedTask.checklist.length) * 100;
     }, [editedTask.checklist]);
 
-    const getSimpleUser = (user: User | null) => {
+    const getSimpleUser = (): SimpleUser | null => {
         if (!user) return null;
         return {
             uid: user.uid,
             displayName: user.displayName,
             photoURL: user.photoURL,
-            email: user.email,
         }
     }
     
@@ -91,13 +89,14 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     }, [task, workspaceId, boardId]);
 
     const handleFieldUpdate = async (field: keyof Task, value: any, logMessage?: string) => {
-        if (!task || !user) return;
+        const simpleUser = getSimpleUser();
+        if (!task || !simpleUser) return;
         
         try {
             const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
             await updateDoc(taskRef, { [field]: value });
             if (logMessage) {
-                await logActivity(workspaceId, boardId, user, logMessage, task.id);
+                await logActivity(workspaceId, boardId, simpleUser, logMessage, task.id);
             }
         } catch (error) {
             console.error(`Failed to update task ${field}:`, error);
@@ -117,7 +116,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
     
     const handleDateSelect = (date: Date | undefined) => {
-        if (!date || !user) return;
+        const simpleUser = getSimpleUser();
+        if (!date || !simpleUser) return;
         const oldDate = originalTask.dueDate ? format(asJsDate(originalTask.dueDate), "PPP") : "no date";
         const newDate = format(date, "PPP");
         const logMessage = `set the due date for task "${editedTask.content}" to ${newDate} (from ${oldDate}).`;
@@ -131,8 +131,9 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     }
 
     const handleDelete = async () => {
+        const simpleUser = getSimpleUser();
         try {
-            if (!user) throw new Error("User not authenticated.");
+            if (!simpleUser) throw new Error("User not authenticated.");
             const taskToDelete = { ...editedTask }; // Capture state before deletion
             const batch = writeBatch(db);
 
@@ -151,7 +152,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
             batch.delete(doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id));
             
             await batch.commit();
-            await logActivity(workspaceId, boardId, user, `deleted task "${taskToDelete.content}".`);
+            await logActivity(workspaceId, boardId, simpleUser, `deleted task "${taskToDelete.content}".`);
 
 
             toast({ title: 'Task deleted successfully' });
@@ -163,9 +164,10 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     }
     
     const handleGenerateTags = async () => {
+        const simpleUser = getSimpleUser();
+        if (!simpleUser) return;
         setIsGeneratingTags(true);
         try {
-             if (!user) throw new Error("User not authenticated.");
             const result = await suggestTaskTags({
                 title: editedTask.content,
                 description: editedTask.description,
@@ -185,7 +187,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     }
 
     const handleAddTag = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && newTag.trim() && task && user) {
+        const simpleUser = getSimpleUser();
+        if (e.key === 'Enter' && newTag.trim() && task && simpleUser) {
             e.preventDefault();
             const newTags = [...(editedTask.tags || []), newTag.trim()];
             setEditedTask({...editedTask, tags: newTags});
@@ -195,15 +198,17 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
 
     const handleRemoveTag = async (tagToRemove: string) => {
-        if (!task || !user) return;
+        const simpleUser = getSimpleUser();
+        if (!task || !simpleUser) return;
         const newTags = editedTask.tags?.filter(t => t !== tagToRemove);
         setEditedTask({...editedTask, tags: newTags});
         handleFieldUpdate('tags', arrayRemove(tagToRemove), `removed label "${tagToRemove}" from task "${editedTask.content}".`);
     };
     
     const toggleAssignee = (uid: string) => {
+        const simpleUser = getSimpleUser();
         const member = boardMembers.find(m => m.uid === uid);
-        if (!member || !user) return;
+        if (!member || !simpleUser) return;
 
         const currentAssignees = editedTask.assignees || [];
         const isAssigned = currentAssignees.includes(uid);
@@ -221,19 +226,20 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     
     const handlePostComment = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newComment.trim() || !user) return;
+        const simpleUser = getSimpleUser();
+        if (!newComment.trim() || !simpleUser) return;
         setIsPostingComment(true);
 
         try {
             const commentsCollectionRef = collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`);
             await addDoc(commentsCollectionRef, {
                 content: newComment,
-                authorId: user.uid,
-                authorName: user.displayName || 'Anonymous',
-                authorPhotoURL: user.photoURL || '',
+                authorId: simpleUser.uid,
+                authorName: simpleUser.displayName || 'Anonymous',
+                authorPhotoURL: simpleUser.photoURL || '',
                 createdAt: serverTimestamp(),
             });
-            await logActivity(workspaceId, boardId, user, `commented on task "${editedTask.content}": "${newComment}"`, task.id);
+            await logActivity(workspaceId, boardId, simpleUser, `commented on task "${editedTask.content}": "${newComment}"`, task.id);
             setNewComment('');
         } catch (error) {
             console.error("Failed to post comment:", error);
@@ -244,7 +250,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
 
     const handleAddChecklistItem = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && newChecklistItem.trim() && user) {
+        const simpleUser = getSimpleUser();
+        if (e.key === 'Enter' && newChecklistItem.trim() && simpleUser) {
             e.preventDefault();
             const newItem: ChecklistItem = {
                 id: new Date().toISOString(),
@@ -259,7 +266,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
     
     const toggleChecklistItem = (itemId: string) => {
-        if (!user) return;
+        const simpleUser = getSimpleUser();
+        if (!simpleUser) return;
         const newChecklist = editedTask.checklist?.map(item =>
             item.id === itemId ? { ...item, completed: !item.completed } : item
         );
@@ -275,7 +283,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
 
     const handleDeleteChecklistItem = (itemId: string) => {
-        if(!user) return;
+        const simpleUser = getSimpleUser();
+        if(!simpleUser) return;
         const item = editedTask.checklist?.find(i => i.id === itemId);
         const newChecklist = editedTask.checklist?.filter(i => i.id !== itemId);
         setEditedTask({...editedTask, checklist: newChecklist});
@@ -285,7 +294,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || e.target.files.length === 0 || !user) return;
+        const simpleUser = getSimpleUser();
+        if (!e.target.files || e.target.files.length === 0 || !simpleUser) return;
         const file = e.target.files[0];
         setIsUploading(true);
         toast({ title: 'Uploading file...' });
@@ -322,7 +332,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     const handleDeleteAttachment = async (attachmentToDelete: Attachment) => {
         toast({ title: 'Deleting attachment...' });
         try {
-            if (!user) throw new Error("User not authenticated.");
+            const simpleUser = getSimpleUser();
+            if (!simpleUser) throw new Error("User not authenticated.");
             // Delete from storage
             const fileRef = ref(storage, attachmentToDelete.path);
             await deleteObject(fileRef);

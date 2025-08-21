@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
-import { logActivity } from '@/lib/activity-logger';
+import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
 export function CreateTaskDialog({ workspaceId, boardId, groupId, columnItemCount }: { workspaceId: string, boardId: string, groupId: string, columnItemCount: number }) {
     const [content, setContent] = React.useState('');
@@ -35,7 +35,12 @@ export function CreateTaskDialog({ workspaceId, boardId, groupId, columnItemCoun
                 createdAt: serverTimestamp(),
             });
 
-            await logActivity(workspaceId, boardId, user, `created task "${content}"`, taskRef.id);
+            const simpleUser: SimpleUser = {
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+            };
+            await logActivity(workspaceId, boardId, simpleUser, `created task "${content}"`, taskRef.id);
 
             toast({ title: "Task created successfully!" });
             setContent('');
@@ -80,7 +85,3 @@ export function CreateTaskDialog({ workspaceId, boardId, groupId, columnItemCoun
         </Dialog>
     )
 }
-
-    
-
-    

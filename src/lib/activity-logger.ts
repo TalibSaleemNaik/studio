@@ -3,20 +3,28 @@
 
 import { db } from '@/lib/firebase';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import type { User } from 'firebase/auth';
+
+/**
+ * A simplified user object to prevent circular dependencies.
+ */
+export interface SimpleUser {
+    uid: string;
+    displayName: string | null;
+    photoURL: string | null;
+}
 
 /**
  * Logs an activity to the board's activity subcollection.
  * @param workspaceId The ID of the workspace.
  * @param boardId The ID of the board.
- * @param user The user performing the action.
+ * @param user The simplified user object of the user performing the action.
  * @param message The activity message to log.
  * @param taskId Optional ID of the task related to the activity.
  */
 export async function logActivity(
     workspaceId: string,
     boardId: string,
-    user: User,
+    user: SimpleUser,
     message: string,
     taskId?: string
 ) {
@@ -41,5 +49,3 @@ export async function logActivity(
         // For now, we'll just log the error to the console.
     }
 }
-
-    
