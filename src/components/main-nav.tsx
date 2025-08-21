@@ -37,23 +37,6 @@ export function MainNav() {
           </Link>
         ))}
       </div>
-      <div className="mt-4 p-2">
-        <h3 className="px-3 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider mb-2">Workspaces</h3>
-         <div className="flex flex-col gap-1">
-            {workspaces.map((workspace) => (
-                 <Link
-                    key={workspace.name}
-                    href={workspace.href}
-                    className={cn(
-                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-muted/50'
-                    )}
-                >
-                    <FolderKanban className="h-4 w-4" />
-                    <span>{workspace.name}</span>
-                </Link>
-            ))}
-         </div>
-      </div>
     </nav>
   );
 }

@@ -34,13 +34,14 @@ export function CreateGroupDialog({ workspaceId, boardId, columnCount }: { works
                 createdAt: serverTimestamp(),
             });
 
-            const simpleUser: SimpleUser = {
-                uid: user.uid,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-            };
-            await logActivity(workspaceId, boardId, simpleUser, `created list "${name}"`);
-
+            if (user) {
+                const simpleUser: SimpleUser = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                };
+                await logActivity(workspaceId, boardId, simpleUser, `created list "${name}"`);
+            }
 
             toast({ title: "List created successfully!" });
             setName('');
@@ -56,7 +57,7 @@ export function CreateGroupDialog({ workspaceId, boardId, columnCount }: { works
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
                  <Button variant="outline" className="shrink-0">
-                  <Plus className="mr-2 h-4 w-4" /> Add New List
+                  <Plus className="mr-2 h-4 w-4" /> Add column
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">

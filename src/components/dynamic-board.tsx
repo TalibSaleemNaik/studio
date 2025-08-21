@@ -4,11 +4,11 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
-import { Loader2, Share, Search, ChevronDown, Trash2, History } from 'lucide-react';
+import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, deleteDoc, getDoc, getDocs, deleteField } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -197,71 +197,6 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     )
 }
 
-function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId: string, boardId: string }) {
-    const [isEditing, setIsEditing] = React.useState(false);
-    const [boardName, setBoardName] = React.useState(name);
-    const { user } = useAuth();
-    const { toast } = useToast();
-
-    React.useEffect(() => {
-        setBoardName(name);
-    }, [name]);
-
-    const handleNameChange = async () => {
-        if (!user || boardName.trim() === '' || boardName === name) {
-            setBoardName(name);
-            setIsEditing(false);
-            return;
-        }
-
-        try {
-            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
-            await updateDoc(boardRef, { name: boardName });
-            
-            const simpleUser: SimpleUser = {
-                uid: user.uid,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-            };
-            await logActivity(workspaceId, boardId, simpleUser, `renamed the board to "${boardName}" (from "${name}")`);
-            
-            toast({ title: 'Board name updated.' });
-        } catch (error) {
-            console.error("Error updating board name:", error);
-            toast({ variant: 'destructive', title: 'Failed to update board name.' });
-            setBoardName(name);
-        }
-        setIsEditing(false);
-    };
-
-    return (
-        <div className="flex items-center justify-between mb-6">
-            <h1
-                className="text-3xl font-bold font-headline"
-            >
-                {isEditing ? (
-                    <Input
-                        value={boardName}
-                        onChange={(e) => setBoardName(e.target.value)}
-                        onBlur={handleNameChange}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleNameChange();
-                            if (e.key === 'Escape') {
-                                setBoardName(name);
-                                setIsEditing(false);
-                            }
-                        }}
-                        autoFocus
-                        className="text-3xl font-bold font-headline h-auto p-0 border-transparent focus-visible:ring-0 bg-transparent"
-                    />
-                ) : (
-                    <span className="cursor-pointer" onClick={() => setIsEditing(true)}>{boardName}</span>
-                )}
-            </h1>
-        </div>
-    );
-}
-
 function Board({ boardId }: { boardId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
@@ -272,22 +207,11 @@ function Board({ boardId }: { boardId: string }) {
   const [boardMembers, setBoardMembers] = React.useState<BoardMember[]>([]);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedAssignees, setSelectedAssignees] = React.useState<string[]>([]);
-  const [selectedLabels, setSelectedLabels] = React.useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = React.useState<string[]>([]);
   const [isActivityDrawerOpen, setIsActivityDrawerOpen] = React.useState(false);
   const { toast } = useToast();
 
   const workspaceId = 'default-workspace';
-  
-  const allLabels = React.useMemo(() => {
-    if (!columns) return [];
-    const labels = new Set<string>();
-    Object.values(columns).forEach(column => {
-        column.items.forEach(item => {
-            item.tags?.forEach(tag => labels.add(tag));
-        });
-    });
-    return Array.from(labels).sort();
-  }, [columns]);
   
   React.useEffect(() => {
     if (!user || !boardId || !workspaceId) {
@@ -297,7 +221,6 @@ function Board({ boardId }: { boardId: string }) {
 
     const boardRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}`);
     
-    // Main subscription to the board document to control access and get members
     const unsubscribeBoard = onSnapshot(boardRef, async (boardSnap) => {
         if (!boardSnap.exists()) {
             setError("Board not found or you don't have access.");
@@ -308,7 +231,6 @@ function Board({ boardId }: { boardId: string }) {
         const boardData = boardSnap.data();
         const memberUIDs = Object.keys(boardData.members || {});
         
-        // Security Check: Is the current user a member of this board?
         if (!memberUIDs.includes(user.uid)) {
             setError("You do not have permission to view this board.");
             setLoading(false);
@@ -318,7 +240,6 @@ function Board({ boardId }: { boardId: string }) {
         setBoard({ name: boardData.name });
         setError(null);
 
-        // Fetch profiles for all members
         try {
             if (memberUIDs.length > 0) {
                  const userDocs = await Promise.all(memberUIDs.map(uid => getDoc(doc(db, 'users', uid))));
@@ -341,14 +262,12 @@ function Board({ boardId }: { boardId: string }) {
              toast({ variant: 'destructive', title: 'Error loading board members' });
         }
 
-        // Now that we've confirmed access, set up listeners for groups and tasks
         const groupsQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/groups`), orderBy('order'));
         const tasksQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`));
 
         const unsubscribeGroups = onSnapshot(groupsQuery, (groupsSnapshot) => {
              const groupsData = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
              
-             // This nested subscription ensures we always have the latest groups when tasks are updated
              const unsubscribeTasks = onSnapshot(tasksQuery, (tasksSnapshot) => {
                  const tasksData = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<Task, 'id'> }));
                  
@@ -378,7 +297,6 @@ function Board({ boardId }: { boardId: string }) {
             setLoading(false);
         });
 
-        // Return a function to clean up the groups listener
         return () => unsubscribeGroups();
 
     }, (boardError) => {
@@ -392,7 +310,6 @@ function Board({ boardId }: { boardId: string }) {
 
     return () => {
         unsubscribeBoard();
-        // Child unsubscribers are handled within their parent callbacks
     };
 }, [user, boardId, workspaceId, toast]);
 
@@ -400,12 +317,6 @@ function Board({ boardId }: { boardId: string }) {
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, type, draggableId } = result;
     if (!destination || !columns || !user) return;
-
-    const simpleUser: SimpleUser = {
-        uid: user.uid,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-    };
 
     if (type === 'COLUMN') {
         const orderedColumns = Object.values(columns).sort((a,b) => a.order - b.order);
@@ -457,7 +368,12 @@ function Board({ boardId }: { boardId: string }) {
       batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
       
       const task = columns[source.droppableId].items[source.index];
-      logActivity(workspaceId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
+      const simpleUser: SimpleUser = {
+            uid: user.uid,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+        };
+      await logActivity(workspaceId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
 
       sourceItems.forEach((item, index) => {
         const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
@@ -511,10 +427,10 @@ function Board({ boardId }: { boardId: string }) {
                 const assigneeMatch = selectedAssignees.length === 0 || 
                     item.assignees?.some(assignee => selectedAssignees.includes(assignee));
 
-                const labelMatch = selectedLabels.length === 0 ||
-                    selectedLabels.every(label => item.tags?.includes(label));
+                const priorityMatch = selectedPriorities.length === 0 ||
+                    (item.priority && selectedPriorities.includes(item.priority));
                 
-                return searchMatch && assigneeMatch && labelMatch;
+                return searchMatch && assigneeMatch && priorityMatch;
             })
         }
     ])
@@ -530,39 +446,36 @@ function Board({ boardId }: { boardId: string }) {
     );
   };
 
-  const handleLabelSelect = (label: string) => {
-    setSelectedLabels(prev => 
-        prev.includes(label) 
-        ? prev.filter(l => l !== label) 
-        : [...prev, label]
+  const handlePrioritySelect = (priority: string) => {
+    setSelectedPriorities(prev => 
+        prev.includes(priority) 
+        ? prev.filter(p => p !== priority) 
+        : [...prev, priority]
     );
   };
 
   return (
       <>
-        <BoardHeader name={board.name} workspaceId={workspaceId} boardId={boardId} />
         <div className="flex items-center justify-between mb-4">
-             <div className="flex items-center gap-2">
+             <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search tasks..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-9 w-64"
+                        className="pl-9 w-60 bg-muted"
                     />
                 </div>
                 <Popover>
                     <PopoverTrigger asChild>
                         <Button variant="outline" className="gap-1">
-                            <span>Assignee</span>
+                            <span>All assignees</span>
                             {selectedAssignees.length > 0 && <Badge variant="secondary">{selectedAssignees.length}</Badge>}
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent 
-                        className="p-0 w-64"
-                        >
+                    <PopoverContent className="p-0 w-64">
                         <Command>
                             <CommandInput placeholder="Filter assignees..." />
                             <CommandList>
@@ -571,8 +484,7 @@ function Board({ boardId }: { boardId: string }) {
                                     {boardMembers.map(member => (
                                         <CommandItem 
                                             key={member.uid} 
-                                            value={member.uid}
-                                            disabled={false}
+                                            value={member.displayName || member.uid}
                                             onSelect={() => handleAssigneeSelect(member.uid)}
                                             className="cursor-pointer"
                                         >
@@ -589,35 +501,29 @@ function Board({ boardId }: { boardId: string }) {
                         </Command>
                     </PopoverContent>
                 </Popover>
-                <Popover>
+                 <Popover>
                     <PopoverTrigger asChild>
                         <Button variant="outline" className="gap-1">
-                            <span>Label</span>
-                             {selectedLabels.length > 0 && <Badge variant="secondary">{selectedLabels.length}</Badge>}
+                            <span>All priorities</span>
+                             {selectedPriorities.length > 0 && <Badge variant="secondary">{selectedPriorities.length}</Badge>}
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     </PopoverTrigger>
-                     <PopoverContent 
-                        className="p-0 w-64"
-                        >
+                     <PopoverContent className="p-0 w-64">
                         <Command>
-                            <CommandInput placeholder="Filter labels..." />
+                            <CommandInput placeholder="Filter priorities..." />
                             <CommandList>
-                                <CommandEmpty>No labels found.</CommandEmpty>
+                                <CommandEmpty>No priorities found.</CommandEmpty>
                                 <CommandGroup>
-                                    {allLabels.map(label => (
+                                    {['low', 'medium', 'high', 'urgent'].map(p => (
                                         <CommandItem 
-                                            key={label}
-                                            value={label}
-                                            disabled={false}
-                                            onSelect={() => handleLabelSelect(label)}
-                                            className="cursor-pointer"
+                                            key={p}
+                                            value={p}
+                                            onSelect={() => handlePrioritySelect(p)}
+                                            className="cursor-pointer capitalize"
                                         >
-                                            <Checkbox 
-                                              className="mr-2"
-                                              checked={selectedLabels.includes(label)} 
-                                            />
-                                            <span>{label}</span>
+                                            <Checkbox className="mr-2" checked={selectedPriorities.includes(p)} />
+                                            <span>{p}</span>
                                         </CommandItem>
                                     ))}
                                 </CommandGroup>
@@ -625,8 +531,8 @@ function Board({ boardId }: { boardId: string }) {
                         </Command>
                     </PopoverContent>
                 </Popover>
-                {(selectedAssignees.length > 0 || selectedLabels.length > 0) && (
-                    <Button variant="ghost" onClick={() => { setSelectedAssignees([]); setSelectedLabels([]); }}>
+                {(selectedAssignees.length > 0 || selectedPriorities.length > 0) && (
+                    <Button variant="ghost" onClick={() => { setSelectedAssignees([]); setSelectedPriorities([]); }}>
                         Clear filters
                     </Button>
                 )}
@@ -637,7 +543,7 @@ function Board({ boardId }: { boardId: string }) {
                     Activity
                 </Button>
                 <BoardMembersDialog workspaceId={workspaceId} boardId={boardId} boardMembers={boardMembers} />
-                <CreateGroupDialog 
+                 <CreateGroupDialog 
                     workspaceId={workspaceId}
                     boardId={boardId}
                     columnCount={orderedColumns.length}
@@ -667,7 +573,7 @@ function Board({ boardId }: { boardId: string }) {
                 <div 
                     ref={provided.innerRef} 
                     {...provided.droppableProps}
-                    className="flex items-start gap-6 h-full overflow-x-auto pb-4"
+                    className="flex-1 flex items-start gap-5 overflow-x-auto pb-4 -mx-8 px-8"
                 >
                 {orderedColumns.map((column, index) => (
                     <BoardColumn
@@ -692,31 +598,28 @@ function Board({ boardId }: { boardId: string }) {
 function BoardSkeleton() {
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <Skeleton className="h-9 w-64" />
-      </div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-10 w-24" />
-          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-60" />
+          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-10 w-32" />
         </div>
         <div className="flex items-center gap-2">
           <Skeleton className="h-10 w-24" />
           <Skeleton className="h-10 w-32" />
         </div>
       </div>
-      <div className="flex items-start gap-6 h-full overflow-x-auto pb-4">
-        {['To Do', 'In Progress', 'Done'].map((name) => (
-          <div key={name} className="shrink-0 w-80">
-              <div className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
+      <div className="flex-1 flex items-start gap-5 overflow-x-auto pb-4 -mx-8 px-8">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="shrink-0 w-80">
+              <div className="bg-muted/30 rounded-lg p-3 h-full flex flex-col">
               <div className="flex justify-between items-center mb-4">
                   <Skeleton className="h-6 w-24" />
                   <Skeleton className="h-6 w-8" />
               </div>
-              <div className="space-y-4 flex-1 overflow-y-auto">
-                  <Skeleton className="h-20 w-full" />
-                  <Skeleton className="h-20 w-full" />
+              <div className="space-y-3 flex-1 overflow-y-auto">
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
                   <Skeleton className="h-12 w-full" />
               </div>
               </div>
@@ -731,5 +634,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    

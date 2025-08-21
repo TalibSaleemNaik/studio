@@ -3,21 +3,18 @@
 
 import React from 'react';
 import { Draggable, Droppable } from '@hello-pangea/dnd';
-import { GripVertical, MoreHorizontal, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch, collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Task, Column, BoardMember } from './types';
 import { TaskCard } from './task-card';
-import { CreateTaskDialog } from './create-task-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
@@ -39,12 +36,14 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
         }
         try {
             await updateDoc(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, column.id), { name: newName });
-             const simpleUser: SimpleUser = {
-                uid: user.uid,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-            };
-            await logActivity(workspaceId, boardId, simpleUser, `renamed list to "${newName}" (from "${originalName}")`);
+             if (user) {
+                const simpleUser: SimpleUser = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                };
+                await logActivity(workspaceId, boardId, simpleUser, `renamed list to "${newName}" (from "${originalName}")`);
+            }
             toast({ title: "List renamed" });
             setOriginalName(newName);
             setIsRenameOpen(false);
@@ -71,13 +70,14 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
             });
             await batch.commit();
 
-            const simpleUser: SimpleUser = {
-                uid: user.uid,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-            };
-            await logActivity(workspaceId, boardId, simpleUser, `deleted list "${column.name}"`);
-
+            if (user) {
+                const simpleUser: SimpleUser = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                };
+                await logActivity(workspaceId, boardId, simpleUser, `deleted list "${column.name}"`);
+            }
             toast({ title: "List deleted" });
         } catch (error) {
             console.error(error);
@@ -143,8 +143,67 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
     )
 }
 
+function QuickAdd({ column, workspaceId, boardId }: { column: Column, workspaceId: string, boardId: string }) {
+    const [content, setContent] = React.useState('');
+    const { toast } = useToast();
+    const { user } = useAuth();
+
+    const handleCreateTask = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!content.trim() || !user) {
+            return;
+        }
+        
+        try {
+            const taskRef = await addDoc(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), {
+                groupId: column.id,
+                content: content,
+                order: column.items.length,
+                createdAt: serverTimestamp(),
+            });
+
+            if(user) {
+                const simpleUser: SimpleUser = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                };
+                await logActivity(workspaceId, boardId, simpleUser, `created task "${content}"`, taskRef.id);
+            }
+            setContent('');
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Failed to create task", description: error.message });
+        } 
+    };
+
+    return (
+        <form onSubmit={handleCreateTask}>
+            <div className="relative mt-2">
+                <Input 
+                    value={content} 
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Quick add..."
+                    className="bg-background/50 pr-8"
+                />
+                 <Button type="submit" size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-10 text-muted-foreground">
+                    <Plus className="h-4 w-4" />
+                </Button>
+            </div>
+        </form>
+    )
+}
+
+const columnColors = [
+    'bg-sky-500',
+    'bg-amber-500',
+    'bg-emerald-500',
+    'bg-rose-500',
+    'bg-indigo-500',
+];
 
 export function BoardColumn({ column, index, boardMembers, onTaskClick, workspaceId, boardId }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workspaceId: string; boardId: string; }) {
+    const color = columnColors[index % columnColors.length];
+    
     return (
         <Draggable draggableId={column.id} index={index}>
             {(provided) => (
@@ -153,15 +212,15 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
                     {...provided.draggableProps}
                     className="shrink-0 w-80"
                 >
-                    <div className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
+                    <div className="bg-muted/30 rounded-lg p-3 h-full flex flex-col">
                         <div
                             {...provided.dragHandleProps}
                             className="flex justify-between items-center mb-4 "
                         >
-                            <div className='flex items-center gap-2'>
-                                <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab" />
-                                <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
-                                <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
+                            <div className='flex items-center gap-3'>
+                                <div className={cn("h-2.5 w-2.5 rounded-full", color)} />
+                                <h2 className="text-md font-semibold text-foreground/90">{column.name}</h2>
+                                <span className="text-sm font-medium bg-background px-2 py-0.5 rounded-md text-muted-foreground">{column.items.length}</span>
                             </div>
                             <ColumnMenu column={column} workspaceId={workspaceId} boardId={boardId} />
                         </div>
@@ -175,7 +234,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
                                     )}
                                 >
                                     <div className={cn(
-                                        'flex-1 space-y-4 overflow-y-auto pr-2 -mr-2 min-h-[1px]',
+                                        'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 min-h-[1px]',
                                         snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
                                     )}>
                                         {column.items.map((item, index) => (
@@ -189,12 +248,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
                                         ))}
                                         {provided.placeholder}
                                     </div>
-                                    <CreateTaskDialog
-                                        workspaceId={workspaceId}
-                                        boardId={boardId}
-                                        groupId={column.id}
-                                        columnItemCount={column.items.length}
-                                    />
+                                    <QuickAdd column={column} workspaceId={workspaceId} boardId={boardId} />
                                 </div>
                             )}
                         </Droppable>
