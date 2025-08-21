@@ -14,13 +14,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch, collection, getDocs, query } from 'firebase/firestore';
 import { Task, Column, BoardMember } from './types';
 import { TaskCard } from './task-card';
 import { CreateTaskDialog } from './create-task-dialog';
 
 
-function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: string}) {
+function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspaceId: string, boardId: string}) {
     const { toast } = useToast();
     const [isRenameOpen, setIsRenameOpen] = React.useState(false);
     const [newName, setNewName] = React.useState(column.name);
@@ -33,7 +33,7 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
             return;
         }
         try {
-            await updateDoc(doc(db, `workspaces/${workspaceId}/groups`, column.id), { name: newName });
+            await updateDoc(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, column.id), { name: newName });
             toast({ title: "List renamed" });
             setIsRenameOpen(false);
         } catch (error) {
@@ -43,15 +43,22 @@ function ColumnMenu({ column, workspaceId }: { column: Column, workspaceId: stri
 
     const handleDelete = async () => {
         const batch = writeBatch(db);
-        batch.delete(doc(db, `workspaces/${workspaceId}/groups`, column.id));
-        column.items.forEach(task => {
-            batch.delete(doc(db, `workspaces/${workspaceId}/tasks`, task.id));
+        
+        // Delete the group itself
+        batch.delete(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, column.id));
+
+        // Delete all tasks within that group
+        const tasksQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), where('groupId', '==', column.id));
+        const tasksSnapshot = await getDocs(tasksQuery);
+        tasksSnapshot.forEach(taskDoc => {
+            batch.delete(taskDoc.ref);
         });
 
         try {
             await batch.commit();
             toast({ title: "List deleted" });
         } catch (error) {
+            console.error(error);
             toast({ variant: 'destructive', title: 'Failed to delete list' });
         } finally {
             setIsConfirmOpen(false);
@@ -130,7 +137,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
                                 <h2 className="text-lg font-semibold text-foreground/90">{column.name}</h2>
                                 <span className="text-sm font-medium bg-muted px-2 py-1 rounded-md">{column.items.length}</span>
                             </div>
-                            <ColumnMenu column={column} workspaceId={workspaceId} />
+                            <ColumnMenu column={column} workspaceId={workspaceId} boardId={boardId} />
                         </div>
                         <Droppable droppableId={column.id} type="TASK">
                             {(provided, snapshot) => (

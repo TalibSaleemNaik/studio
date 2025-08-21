@@ -6,7 +6,7 @@ import { Loader2, Sparkles, UserPlus, MessageSquare, Trash, Trash2, Calendar } f
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, addDoc, serverTimestamp, arrayUnion, arrayRemove, collection, orderBy, onSnapshot, query, deleteDoc, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, addDoc, serverTimestamp, arrayUnion, arrayRemove, collection, orderBy, onSnapshot, query, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
@@ -39,7 +39,7 @@ const priorityConfig = {
 };
 
 
-export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task; workspaceId: string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
+export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task; workspaceId: string; boardId:string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
     const { user } = useAuth();
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
@@ -58,9 +58,9 @@ export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onO
     
     React.useEffect(() => {
         setEditedTask(task);
-        if (task && workspaceId) {
+        if (task && workspaceId && boardId) {
             const commentsQuery = query(
-                collection(db, `workspaces/${workspaceId}/tasks/${task.id}/comments`),
+                collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`),
                 orderBy('createdAt', 'asc')
             );
             const unsubscribe = onSnapshot(commentsQuery, (snapshot) => {
@@ -69,7 +69,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onO
             });
             return () => unsubscribe();
         }
-    }, [task, workspaceId]);
+    }, [task, workspaceId, boardId]);
 
     const handleUpdate = async (field: keyof Task, value: any) => {
         if (!task) return;
@@ -77,7 +77,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onO
         setEditedTask(updatedTask); // Optimistic update of local state
 
         try {
-            const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, task.id);
+            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
             await updateDoc(taskRef, { [field]: value });
         } catch (error) {
             console.error("Failed to update task:", error);
@@ -98,12 +98,12 @@ export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onO
 
     const handleDelete = async () => {
         try {
-            const commentsQuery = query(collection(db, `workspaces/${workspaceId}/tasks/${task.id}/comments`));
+            const commentsQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`));
             const commentsSnapshot = await getDocs(commentsQuery);
             const batch = writeBatch(db);
             commentsSnapshot.forEach(doc => batch.delete(doc.ref));
             
-            batch.delete(doc(db, `workspaces/${workspaceId}/tasks`, task.id));
+            batch.delete(doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id));
             
             await batch.commit();
 
@@ -138,7 +138,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onO
     const handleAddTag = async (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && newTag.trim() && task) {
             e.preventDefault();
-            const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, task.id);
+            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
             await updateDoc(taskRef, {
                 tags: arrayUnion(newTag.trim())
             });
@@ -148,7 +148,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onO
 
     const handleRemoveTag = async (tagToRemove: string) => {
         if (!task) return;
-        const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, task.id);
+        const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
         await updateDoc(taskRef, {
             tags: arrayRemove(tagToRemove)
         });
@@ -168,7 +168,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardMembers, isOpen, onO
         setIsPostingComment(true);
 
         try {
-            const commentsCollectionRef = collection(db, `workspaces/${workspaceId}/tasks/${task.id}/comments`);
+            const commentsCollectionRef = collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`);
             await addDoc(commentsCollectionRef, {
                 content: newComment,
                 authorId: user.uid,

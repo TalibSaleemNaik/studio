@@ -236,8 +236,7 @@ function Board({ boardId }: { boardId: string }) {
 
 
     const groupsQuery = query(
-      collection(db, `workspaces/${workspaceId}/groups`),
-      where('boardId', '==', boardId),
+      collection(db, `workspaces/${workspaceId}/boards/${boardId}/groups`),
       orderBy('order')
     );
 
@@ -245,8 +244,7 @@ function Board({ boardId }: { boardId: string }) {
       const groupsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
       
       const tasksQuery = query(
-        collection(db, `workspaces/${workspaceId}/tasks`),
-        where('boardId', '==', boardId)
+        collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`)
       );
 
       const unsubscribeTasks = onSnapshot(tasksQuery, (tasksSnapshot) => {
@@ -298,7 +296,7 @@ function Board({ boardId }: { boardId: string }) {
         const batch = writeBatch(db);
         orderedColumns.forEach((col, index) => {
             newColumnsState[col.id].order = index;
-            batch.update(doc(db, `workspaces/${workspaceId}/groups`, col.id), { order: index });
+            batch.update(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, col.id), { order: index });
         });
         setColumns(newColumnsState);
         await batch.commit();
@@ -324,7 +322,7 @@ function Board({ boardId }: { boardId: string }) {
       newColumns[sourceColId] = { ...startColumn, items: sourceItems };
       
       sourceItems.forEach((item, index) => {
-        const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, item.id);
+        const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
         batch.update(taskRef, { order: index });
       });
 
@@ -335,15 +333,15 @@ function Board({ boardId }: { boardId: string }) {
       newColumns[sourceColId] = { ...startColumn, items: sourceItems };
       newColumns[destColId] = { ...endColumn, items: destItems };
       
-      const movedTaskRef = doc(db, `workspaces/${workspaceId}/tasks`, removed.id);
+      const movedTaskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, removed.id);
       batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
 
       sourceItems.forEach((item, index) => {
-        const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, item.id);
+        const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
         batch.update(taskRef, { order: index });
       });
       destItems.forEach((item, index) => {
-         const taskRef = doc(db, `workspaces/${workspaceId}/tasks`, item.id);
+         const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
          batch.update(taskRef, { order: index });
       });
     }
@@ -510,6 +508,7 @@ function Board({ boardId }: { boardId: string }) {
             <TaskDetailsDrawer 
                 task={selectedTask} 
                 workspaceId={workspaceId}
+                boardId={boardId}
                 boardMembers={boardMembers}
                 isOpen={!!selectedTask} 
                 onOpenChange={(open) => !open && setSelectedTask(null)} 

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 
@@ -66,9 +66,8 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
-                const groupRef = doc(collection(db, `workspaces/${workspaceId}/groups`));
+                const groupRef = doc(collection(db, `workspaces/${workspaceId}/boards/${boardRef.id}/groups`));
                 batch.set(groupRef, {
-                    boardId: boardRef.id,
                     name: defaultGroups[i],
                     order: i,
                 });
@@ -166,11 +165,13 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
     const setupListener = async () => {
         setLoading(true);
         try {
-            // First, ensure the user is a member of the workspace. This avoids a race condition.
             await ensureWorkspaceExists(user.uid);
 
-            // Now, set up the listener.
-            const boardsQuery = query(collection(db, `workspaces/${workspaceId}/boards`));
+            const boardsQuery = query(
+                collection(db, `workspaces/${workspaceId}/boards`),
+                where(`members.${user.uid}`, 'in', ['owner', 'editor', 'viewer'])
+            );
+            
             unsubscribe = onSnapshot(boardsQuery, (querySnapshot) => {
                 const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
                 setBoards(boardsData);

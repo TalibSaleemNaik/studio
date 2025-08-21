@@ -25,8 +25,7 @@ export function CreateGroupDialog({ workspaceId, boardId, columnCount }: { works
         }
         setIsCreating(true);
         try {
-            await addDoc(collection(db, `workspaces/${workspaceId}/groups`), {
-                boardId: boardId,
+            await addDoc(collection(db, `workspaces/${workspaceId}/boards/${boardId}/groups`), {
                 name: name,
                 order: columnCount,
                 createdAt: serverTimestamp(),

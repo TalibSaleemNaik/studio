@@ -25,8 +25,7 @@ export function CreateTaskDialog({ workspaceId, boardId, groupId, columnItemCoun
         }
         setIsCreating(true);
         try {
-            await addDoc(collection(db, `workspaces/${workspaceId}/tasks`), {
-                boardId: boardId,
+            await addDoc(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), {
                 groupId: groupId,
                 content: content,
                 order: columnItemCount, // Add to the bottom of the list
