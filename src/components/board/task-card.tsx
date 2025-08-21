@@ -18,19 +18,23 @@ const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 const priorityColors = {
     low: {
         badge: 'bg-green-500/20 text-green-400 border-green-500/30',
-        border: 'border-green-500/50',
+        border: 'border-green-500/20',
+        shadow: 'shadow-[0_4px_20px_-2px] shadow-green-500/10 hover:shadow-green-500/20',
     },
     medium: {
         badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        border: 'border-yellow-500/50',
+        border: 'border-yellow-500/20',
+        shadow: 'shadow-[0_4px_20px_-2px] shadow-yellow-500/10 hover:shadow-yellow-500/20',
     },
     high: {
         badge: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-        border: 'border-orange-500/50',
+        border: 'border-orange-500/20',
+        shadow: 'shadow-[0_4px_20px_-2px] shadow-orange-500/10 hover:shadow-orange-500/20',
     },
     urgent: {
         badge: 'bg-red-500/20 text-red-400 border-red-500/30',
-        border: 'border-red-500/50',
+        border: 'border-red-500/20',
+        shadow: 'shadow-[0_4px_20px_-2px] shadow-red-500/10 hover:shadow-red-500/20',
     },
 };
 
@@ -102,7 +106,7 @@ function ChecklistProgressCircle({ task }: { task: Task }) {
 export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; index: number; boardMembers: BoardMember[]; onClick: () => void; }) {
     
     const getAssignee = (uid: string) => boardMembers.find(m => m.uid === uid);
-    const priorityClass = task.priority ? priorityColors[task.priority].border : 'border-transparent';
+    const priorityConfig = task.priority ? priorityColors[task.priority] : null;
 
     return (
         <Draggable draggableId={task.id} index={index}>
@@ -113,9 +117,9 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
                     {...provided.dragHandleProps}
                     onClick={onClick}
                     className={cn(
-                        "bg-card p-3.5 rounded-lg border-2 flex flex-col gap-4 transition-shadow cursor-pointer relative",
-                        snapshot.isDragging && "shadow-xl",
-                        priorityClass
+                        "bg-card p-3.5 rounded-xl border flex flex-col gap-4 transition-all cursor-pointer relative",
+                        snapshot.isDragging && "shadow-xl scale-105",
+                        priorityConfig ? `${priorityConfig.border} ${priorityConfig.shadow}` : "border-transparent"
                     )}
                     style={{
                         ...provided.draggableProps.style
