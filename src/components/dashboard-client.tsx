@@ -53,7 +53,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                 description: description,
                 createdAt: serverTimestamp(),
                 ownerId: user.uid,
-                members: boardMembers
+                members: boardMembers // <-- Add members to the board
             });
 
             // Ensure user is a member of the workspace itself
