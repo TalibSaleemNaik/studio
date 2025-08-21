@@ -1,19 +1,16 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can read and write their own user document
+    // Allow authenticated users to read public user profiles
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == userId;
     }
-    
-    // Workspaces and their subcollections
+
     match /workspaces/{workspaceId}/{document=**} {
-      // For now, allow any authenticated user to read/write.
-      // TODO: Implement role-based access control (e.g., only workspace members can access)
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null; // Simplified for this example
     }
   }
 }
