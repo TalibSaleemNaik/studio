@@ -1,4 +1,13 @@
 
+export interface Attachment {
+  id: string;
+  name: string;
+  url: string;
+  path: string; // Full path in Firebase Storage
+  type: string;
+  createdAt: any;
+}
+
 export interface ChecklistItem {
   id: string;
   text: string;
@@ -17,6 +26,7 @@ export interface Task {
   assignees?: string[]; // Array of user UIDs
   comments?: Comment[];
   checklist?: ChecklistItem[];
+  attachments?: Attachment[];
 }
 
 export interface Column {

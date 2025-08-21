@@ -2,11 +2,12 @@
 'use client';
 
 import React from 'react';
-import { Loader2, Sparkles, UserPlus, MessageSquare, Trash, Trash2, Calendar } from 'lucide-react';
+import { Loader2, Sparkles, UserPlus, MessageSquare, Trash, Trash2, Calendar, Paperclip, File, UploadCloud, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import { doc, updateDoc, addDoc, serverTimestamp, arrayUnion, arrayRemove, collection, orderBy, onSnapshot, query, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useAuth } from '@/hooks/use-auth';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,9 @@ import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Flag } from 'lucide-react';
 import { format } from 'date-fns';
-import { Task, ChecklistItem, Comment, BoardMember } from './types';
+import { Task, ChecklistItem, Comment, BoardMember, Attachment } from './types';
+import { v4 as uuidv4 } from 'uuid';
+import Link from 'next/link';
 
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
@@ -41,6 +44,8 @@ const priorityConfig = {
 
 export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task; workspaceId: string; boardId:string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
     const { user } = useAuth();
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [isUploading, setIsUploading] = React.useState(false);
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
     const [newTag, setNewTag] = React.useState("");
@@ -98,9 +103,18 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
 
     const handleDelete = async () => {
         try {
+            const batch = writeBatch(db);
+
+            // Delete attachments from Storage
+            if (task.attachments) {
+                for (const attachment of task.attachments) {
+                    const fileRef = ref(storage, attachment.path);
+                    await deleteObject(fileRef);
+                }
+            }
+            
             const commentsQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`));
             const commentsSnapshot = await getDocs(commentsQuery);
-            const batch = writeBatch(db);
             commentsSnapshot.forEach(doc => batch.delete(doc.ref));
             
             batch.delete(doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id));
@@ -209,6 +223,62 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     const handleDeleteChecklistItem = (itemId: string) => {
         const newChecklist = editedTask.checklist?.filter(item => item.id !== itemId);
         handleUpdate('checklist', newChecklist);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+        setIsUploading(true);
+        toast({ title: 'Uploading file...' });
+
+        try {
+            const filePath = `tasks/${task.id}/attachments/${uuidv4()}-${file.name}`;
+            const storageRef = ref(storage, filePath);
+            const uploadResult = await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(uploadResult.ref);
+
+            const newAttachment: Attachment = {
+                id: uuidv4(),
+                name: file.name,
+                url: downloadURL,
+                path: filePath,
+                type: file.type,
+                createdAt: serverTimestamp(),
+            };
+
+            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
+            await updateDoc(taskRef, {
+                attachments: arrayUnion(newAttachment)
+            });
+
+            toast({ title: 'File uploaded successfully!' });
+        } catch (error) {
+            console.error("File upload failed:", error);
+            toast({ variant: 'destructive', title: 'File upload failed' });
+        } finally {
+            setIsUploading(false);
+            if(fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
+    const handleDeleteAttachment = async (attachmentToDelete: Attachment) => {
+        toast({ title: 'Deleting attachment...' });
+        try {
+            // Delete from storage
+            const fileRef = ref(storage, attachmentToDelete.path);
+            await deleteObject(fileRef);
+
+            // Remove from Firestore
+            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
+            await updateDoc(taskRef, {
+                attachments: arrayRemove(attachmentToDelete)
+            });
+
+            toast({ title: 'Attachment deleted.' });
+        } catch (error) {
+             console.error("Failed to delete attachment:", error);
+            toast({ variant: 'destructive', title: 'Failed to delete attachment' });
+        }
     };
     
 
@@ -419,6 +489,56 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                                 onKeyDown={handleAddChecklistItem}
                             />
                         </div>
+                        
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <Paperclip className="h-5 w-5" />
+                                Attachments
+                            </h3>
+                            <div className="space-y-3">
+                                {editedTask.attachments?.map(attachment => (
+                                    <div key={attachment.id} className="flex items-center justify-between gap-2 p-2 rounded-md border group">
+                                        <div className="flex items-center gap-3 flex-1">
+                                            <File className="h-6 w-6 text-muted-foreground" />
+                                            <Link href={attachment.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium hover:underline truncate">
+                                                {attachment.name}
+                                            </Link>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                                                <Link href={attachment.url} target="_blank">
+                                                    <Download className="h-4 w-4" />
+                                                </Link>
+                                            </Button>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100">
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Delete Attachment?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Are you sure you want to delete "{attachment.name}"? This action cannot be undone.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleDeleteAttachment(attachment)}>Delete</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                                {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                                Upload a file
+                            </Button>
+                        </div>
 
 
                          <div className="space-y-4">
@@ -479,7 +599,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                             <AlertDialogHeader>
                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                             <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete this task.
+                                This action cannot be undone. This will permanently delete this task and all of its attachments.
                             </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
