@@ -203,29 +203,29 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
 
     return (
         <div className="flex items-center justify-between mb-6">
-            {isEditing ? (
-                <Input
-                    value={boardName}
-                    onChange={(e) => setBoardName(e.target.value)}
-                    onBlur={handleNameChange}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleNameChange();
-                        if (e.key === 'Escape') {
-                            setBoardName(name);
-                            setIsEditing(false);
-                        }
-                    }}
-                    autoFocus
-                    className="text-3xl font-bold font-headline h-auto p-0 border-transparent focus-visible:ring-0 bg-transparent"
-                />
-            ) : (
-                <h1
-                    className="text-3xl font-bold font-headline cursor-pointer"
-                    onClick={() => setIsEditing(true)}
-                >
-                    {boardName}
-                </h1>
-            )}
+            <h1
+                className="text-3xl font-bold font-headline"
+                onClick={() => setIsEditing(true)}
+            >
+                {isEditing ? (
+                    <Input
+                        value={boardName}
+                        onChange={(e) => setBoardName(e.target.value)}
+                        onBlur={handleNameChange}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleNameChange();
+                            if (e.key === 'Escape') {
+                                setBoardName(name);
+                                setIsEditing(false);
+                            }
+                        }}
+                        autoFocus
+                        className="text-3xl font-bold font-headline h-auto p-0 border-transparent focus-visible:ring-0 bg-transparent"
+                    />
+                ) : (
+                    <span className="cursor-pointer">{boardName}</span>
+                )}
+            </h1>
         </div>
     );
 }
