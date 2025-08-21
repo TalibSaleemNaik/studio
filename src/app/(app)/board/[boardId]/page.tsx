@@ -1,8 +1,11 @@
-
 import { DynamicBoard } from "@/components/dynamic-board";
 
-export default function BoardPage({ params }: { params: { boardId: string } }) {
-  const { boardId } = params;
+type Params = { boardId: string };
+
+export default async function BoardPage({
+  params,
+}: { params: Promise<Params> }) {
+  const { boardId } = await params; // ✅ must await
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
