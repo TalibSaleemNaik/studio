@@ -18,22 +18,22 @@ const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 const priorityColors = {
     low: {
         badge: 'bg-green-500/20 text-green-400 border-green-500/30',
-        border: 'border-green-500/50',
+        border: 'border-green-500',
         shadow: 'shadow-green-500/20',
     },
     medium: {
         badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        border: 'border-yellow-500/50',
+        border: 'border-yellow-500',
         shadow: 'shadow-yellow-500/20',
     },
     high: {
         badge: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-        border: 'border-orange-500/50',
+        border: 'border-orange-500',
         shadow: 'shadow-orange-500/20',
     },
     urgent: {
         badge: 'bg-red-500/20 text-red-400 border-red-500/30',
-        border: 'border-red-500/50',
+        border: 'border-red-500',
         shadow: 'shadow-red-500/20',
     },
 };
@@ -119,7 +119,7 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
                     className={cn(
                         "bg-card p-3.5 rounded-xl border-2 flex flex-col gap-4 transition-all cursor-pointer relative shadow-sm hover:shadow-lg",
                         snapshot.isDragging && "shadow-xl scale-105",
-                        priorityConfig ? `${priorityConfig.border} shadow-lg ${priorityConfig.shadow}` : "border-border/20"
+                        priorityConfig ? `${priorityConfig.border} shadow-lg ${priorityConfig.shadow}` : "border-border"
                     )}
                     style={{
                         ...provided.draggableProps.style
