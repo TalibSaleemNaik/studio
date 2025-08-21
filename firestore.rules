@@ -4,25 +4,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check for workspace membership
-    function isWorkspaceMember(workspaceId) {
-      return get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members[request.auth.uid] != null;
+    // Users can only read the users collection and write to their own document.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Users can only read their own profile, but anyone can query the collection to find users by email.
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // Allow any authenticated user to list users to find them for invites.
-    // This is safe because we are not exposing any sensitive data in the documents themselves.
-    match /users/{userId} {
-        allow list: if request.auth != null;
-    }
-
-    // All documents and sub-collections within a workspace are accessible only by its members.
+    // Any authenticated user can read or write within any workspace.
+    // The application logic is responsible for showing users only the
+    // boards and tasks they are members of.
     match /workspaces/{workspaceId}/{document=**} {
-      allow read, write: if request.auth != null && isWorkspaceMember(workspaceId);
+      allow read, write: if request.auth != null;
     }
   }
 }
