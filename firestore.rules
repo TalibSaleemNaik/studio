@@ -1,41 +1,32 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can read any user profile (for invites) but only write to their own.
+
+    // Users can read any user profile (for invites), but only write to their own.
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
-    
-    // Rules for workspaces and their subcollections (boards, groups, tasks)
+
+    // Rules for workspaces and their subcollections (boards, groups, tasks, etc.)
     match /workspaces/{workspaceId} {
-      // Allow read/write to workspace doc if user is a member
-      allow read, write: if request.auth != null && request.auth.uid in resource.data.members;
+      // Allow a user to read a workspace doc if they are a member.
+      allow get: if request.auth.uid in resource.data.members;
 
-      // Allow board access if the user is a member of the parent workspace
-      match /boards/{boardId} {
-        allow read, write: if request.auth != null && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members[request.auth.uid] != null;
-      }
+      // Allow a user to list/query the collections within a workspace if they are a member.
+      // This is crucial for the dashboard and board pages to load data.
+      allow list: if request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members;
       
-      // Allow group access if the user is a member of the parent workspace
-      match /groups/{groupId} {
-         allow read, write: if request.auth != null && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members[request.auth.uid] != null;
-      }
+      // Allow creating/updating/deleting a workspace if the user is an owner.
+      // Note: simplified for now. A real app would have more granular role checks.
+      allow write: if request.auth.uid == resource.data.ownerId;
 
-      // Allow task access if the user is a member of the parent workspace
-      match /tasks/{taskId} {
-         allow read, write: if request.auth != null && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members[request.auth.uid] != null;
-        
-        // Rules for comments subcollection on a task
-        match /comments/{commentId} {
-          // Allow anyone who can see the task to also read its comments
-          allow read: if request.auth != null && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members[request.auth.uid] != null;
-          // Allow a user to create a comment, and only allow the author to update/delete it
-          allow create: if request.auth != null;
-          allow update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
-        }
+      // This rule applies to all subcollections of a workspace (boards, groups, tasks, etc.)
+      match /{subcollection}/{docId} {
+        // Allow read/write access to any document in any subcollection
+        // if the user is a member of the parent workspace.
+        allow read, write: if request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members;
       }
     }
   }
