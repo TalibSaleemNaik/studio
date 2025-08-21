@@ -15,26 +15,22 @@ import { Progress } from '../ui/progress';
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
-const priorityColors = {
+const priorityConfig = {
     low: {
         badge: 'bg-green-500/20 text-green-400 border-green-500/30',
-        border: 'border-green-500',
-        shadow: 'shadow-green-500/20',
+        gradient: 'from-green-900/40 to-card',
     },
     medium: {
         badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        border: 'border-yellow-500',
-        shadow: 'shadow-yellow-500/20',
+        gradient: 'from-yellow-900/40 to-card',
     },
     high: {
         badge: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-        border: 'border-orange-500',
-        shadow: 'shadow-orange-500/20',
+        gradient: 'from-orange-900/40 to-card',
     },
     urgent: {
         badge: 'bg-red-500/20 text-red-400 border-red-500/30',
-        border: 'border-red-500',
-        shadow: 'shadow-red-500/20',
+        gradient: 'from-red-900/40 to-card',
     },
 };
 
@@ -106,7 +102,7 @@ function ChecklistProgressCircle({ task }: { task: Task }) {
 export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; index: number; boardMembers: BoardMember[]; onClick: () => void; }) {
     
     const getAssignee = (uid: string) => boardMembers.find(m => m.uid === uid);
-    const priorityConfig = task.priority ? priorityColors[task.priority] : null;
+    const pConfig = task.priority ? priorityConfig[task.priority] : null;
 
     return (
         <Draggable draggableId={task.id} index={index}>
@@ -117,9 +113,10 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
                     {...provided.dragHandleProps}
                     onClick={onClick}
                     className={cn(
-                        "bg-card p-3.5 rounded-xl border-2 flex flex-col gap-4 transition-all cursor-pointer relative shadow-sm hover:shadow-lg",
+                        "p-3.5 rounded-xl border flex flex-col gap-4 transition-all cursor-pointer relative shadow-sm hover:shadow-lg",
+                        "bg-card border-border",
                         snapshot.isDragging && "shadow-xl scale-105",
-                        priorityConfig ? `${priorityConfig.border} shadow-lg ${priorityConfig.shadow}` : "border-border"
+                        pConfig && `bg-gradient-to-br ${pConfig.gradient}`
                     )}
                     style={{
                         ...provided.draggableProps.style
@@ -154,7 +151,7 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
                             )}
                         </div>
                        {task.priority && (
-                           <Badge variant="outline" className={cn("capitalize text-xs", priorityColors[task.priority].badge)}>
+                           <Badge variant="outline" className={cn("capitalize text-xs", priorityConfig[task.priority].badge)}>
                                {task.priority}
                             </Badge>
                        )}
@@ -170,3 +167,4 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
         </Draggable>
     );
 }
+
