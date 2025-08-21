@@ -204,5 +204,3 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
         </Draggable>
     );
 }
-
-    
