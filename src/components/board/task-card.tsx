@@ -119,7 +119,7 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
                     className={cn(
                         "bg-card p-3.5 rounded-xl border-2 flex flex-col gap-4 transition-all cursor-pointer relative shadow-sm hover:shadow-lg",
                         snapshot.isDragging && "shadow-xl scale-105",
-                        priorityConfig ? `${priorityConfig.border} shadow-lg ${priorityConfig.shadow}` : "border-transparent"
+                        priorityConfig ? `${priorityConfig.border} shadow-lg ${priorityConfig.shadow}` : "border-border/20"
                     )}
                     style={{
                         ...provided.draggableProps.style
