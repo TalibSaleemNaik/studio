@@ -1,48 +1,18 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can read public user profiles for invites, but only write to their own.
+    
+    // Users can read public user profiles (for invites) but only write to their own document.
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth.uid == userId;
     }
 
-    // Rules for all documents within a workspace.
+    // A user can access anything within a workspace if they are a member of that workspace.
+    // This rule recursively applies to all subcollections (boards, groups, tasks, comments, etc.).
     match /workspaces/{workspaceId}/{document=**} {
-      // Helper function to check if the user is a member of the board associated with the current document.
-      // It looks up the boardId from the resource data and checks the members map on that board.
-      function isBoardMember() {
-        let boardId = resource.data.boardId;
-        return get(/databases/$(database)/documents/workspaces/$(workspaceId)/boards/$(boardId)).data.members[request.auth.uid] != null;
-      }
-
-      // Helper function to check membership directly on a board document.
-      function isDirectBoardMember() {
-        return resource.data.members[request.auth.uid] != null;
-      }
-      
-      // Rules for the boards collection
-      match /boards/{boardId} {
-        allow read, write: if request.auth != null && isDirectBoardMember();
-      }
-
-      // Rules for groups and tasks collections
-      match /groups/{groupId} {
-         allow read, write: if request.auth != null && isBoardMember();
-      }
-
-      match /tasks/{taskId} {
-         allow read, write: if request.auth != null && isBoardMember();
-
-         // Rules for comments subcollection on a task
-         match /comments/{commentId} {
-            // To access a comment, the user must be a member of the board the parent task belongs to.
-            // This requires getting the task data to find its boardId.
-            allow read, write: if request.auth != null && get(/databases/$(database)/documents/workspaces/$(workspaceId)/tasks/$(taskId)).data.boardId in get(/databases/$(database)/documents/workspaces/$(workspaceId)/boards).keys();
-         }
-      }
+      allow read, write: if request.auth != null && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members[request.auth.uid] != null;
     }
   }
 }
