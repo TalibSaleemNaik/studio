@@ -30,15 +30,19 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     const { toast } = useToast();
 
     const handleInvite = async () => {
-        if (!inviteEmail.trim()) {
+        const trimmedEmail = inviteEmail.trim();
+        console.log(`Searching for user with email: ${trimmedEmail}`);
+        if (!trimmedEmail) {
             toast({ variant: 'destructive', title: 'Please enter an email address.' });
             return;
         }
         setIsInviting(true);
         try {
             const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('email', '==', inviteEmail.trim()));
+            const q = query(usersRef, where('email', '==', trimmedEmail));
             const querySnapshot = await getDocs(q);
+            
+            console.log(`Found ${querySnapshot.size} user(s) with that email.`);
 
             if (querySnapshot.empty) {
                 toast({ variant: 'destructive', title: 'User not found.' });
@@ -65,7 +69,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
 
         } catch (error) {
             console.error("Error inviting user:", error);
-            toast({ variant: 'destructive', title: 'Failed to invite user.' });
+            toast({ variant: 'destructive', title: 'Failed to invite user.', description: (error as Error).message });
         } finally {
             setIsInviting(false);
         }
