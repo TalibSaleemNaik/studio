@@ -18,24 +18,35 @@ import { doc, updateDoc, writeBatch, collection, getDocs, query, where } from 'f
 import { Task, Column, BoardMember } from './types';
 import { TaskCard } from './task-card';
 import { CreateTaskDialog } from './create-task-dialog';
+import { useAuth } from '@/hooks/use-auth';
+import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
 
 function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspaceId: string, boardId: string}) {
     const { toast } = useToast();
+    const { user } = useAuth();
     const [isRenameOpen, setIsRenameOpen] = React.useState(false);
     const [newName, setNewName] = React.useState(column.name);
+    const [originalName, setOriginalName] = React.useState(column.name);
     const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
     const [isDeleting, setIsDeleting] = React.useState(false);
 
     const handleRename = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newName.trim() || newName === column.name) {
+        if (!newName.trim() || newName === column.name || !user) {
             setIsRenameOpen(false);
             return;
         }
         try {
             await updateDoc(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, column.id), { name: newName });
+             const simpleUser: SimpleUser = {
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+            };
+            await logActivity(workspaceId, boardId, simpleUser, `renamed list to "${newName}" (from "${originalName}")`);
             toast({ title: "List renamed" });
+            setOriginalName(newName);
             setIsRenameOpen(false);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Failed to rename list' });
@@ -43,6 +54,7 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
     }
 
     const handleDelete = async () => {
+        if (!user) return;
         setIsDeleting(true);
         const batch = writeBatch(db);
         
@@ -58,6 +70,14 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
                 batch.delete(taskDoc.ref);
             });
             await batch.commit();
+
+            const simpleUser: SimpleUser = {
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+            };
+            await logActivity(workspaceId, boardId, simpleUser, `deleted list "${column.name}"`);
+
             toast({ title: "List deleted" });
         } catch (error) {
             console.error(error);

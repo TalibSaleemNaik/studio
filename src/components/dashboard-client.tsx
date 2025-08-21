@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -213,7 +212,7 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
   };
   
   const handleDeleteBoard = async () => {
-    if (!boardToDelete) return;
+    if (!boardToDelete || !user) return;
     setIsDeleting(true);
 
     try {

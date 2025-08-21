@@ -208,7 +208,7 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
     }, [name]);
 
     const handleNameChange = async () => {
-        if (boardName.trim() === '' || boardName === name) {
+        if (!user || boardName.trim() === '' || boardName === name) {
             setBoardName(name);
             setIsEditing(false);
             return;
@@ -217,14 +217,14 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
         try {
             const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
             await updateDoc(boardRef, { name: boardName });
-            if (user) {
-                const simpleUser: SimpleUser = {
-                    uid: user.uid,
-                    displayName: user.displayName,
-                    photoURL: user.photoURL,
-                };
-                 await logActivity(workspaceId, boardId, simpleUser, `renamed the board to "${boardName}" (from "${name}")`);
-            }
+            
+            const simpleUser: SimpleUser = {
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+            };
+            await logActivity(workspaceId, boardId, simpleUser, `renamed the board to "${boardName}" (from "${name}")`);
+            
             toast({ title: 'Board name updated.' });
         } catch (error) {
             console.error("Error updating board name:", error);
@@ -238,7 +238,6 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
         <div className="flex items-center justify-between mb-6">
             <h1
                 className="text-3xl font-bold font-headline"
-                onClick={() => setIsEditing(true)}
             >
                 {isEditing ? (
                     <Input
@@ -256,7 +255,7 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
                         className="text-3xl font-bold font-headline h-auto p-0 border-transparent focus-visible:ring-0 bg-transparent"
                     />
                 ) : (
-                    <span className="cursor-pointer">{boardName}</span>
+                    <span className="cursor-pointer" onClick={() => setIsEditing(true)}>{boardName}</span>
                 )}
             </h1>
         </div>
@@ -732,3 +731,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
