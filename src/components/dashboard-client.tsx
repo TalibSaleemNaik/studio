@@ -45,7 +45,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
             const workspaceRef = doc(db, `workspaces/${workspaceId}`);
             const boardRef = doc(collection(db, `workspaces/${workspaceId}/boards`));
             
-            const members = { [user.uid]: 'owner' };
+            const boardMembers = { [user.uid]: 'owner' };
 
             // Set board data
             batch.set(boardRef, {
@@ -53,10 +53,10 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                 description: description,
                 createdAt: serverTimestamp(),
                 ownerId: user.uid,
-                members: members
+                members: boardMembers
             });
 
-            // IMPORTANT: Ensure user is also a member of the workspace
+            // Ensure user is a member of the workspace itself
             batch.set(workspaceRef, {
                 members: {
                     [user.uid]: 'owner'
@@ -140,40 +140,54 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   
-  const ensureWorkspaceExists = useCallback(async () => {
-    if (!user || !workspaceId) return;
+  const ensureWorkspaceExists = useCallback(async (uid: string) => {
+    if (!uid || !workspaceId) return;
     try {
         const workspaceRef = doc(db, `workspaces/${workspaceId}`);
         await setDoc(workspaceRef, { 
             name: "Default Workspace", 
-            ownerId: user.uid,
-            members: { [user.uid]: 'owner' }
+            ownerId: uid,
+            members: { [uid]: 'owner' }
         }, { merge: true });
     } catch(e) {
         console.error("Error ensuring workspace exists:", e);
+        setError("Failed to initialize your workspace. Please try again.");
     }
-  }, [workspaceId, user]);
+  }, [workspaceId]);
 
   useEffect(() => {
-    if (!user || !workspaceId) {
+    if (!user) {
         setLoading(true);
         return;
     }
 
-    setLoading(true);
-    ensureWorkspaceExists();
+    let unsubscribe: () => void = () => {};
 
-    const boardsQuery = query(collection(db, `workspaces/${workspaceId}/boards`));
-    const unsubscribe = onSnapshot(boardsQuery, (querySnapshot) => {
-        const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
-        setBoards(boardsData);
-        setLoading(false);
-        setError(null);
-    }, (err) => {
-        console.error("Error fetching boards:", err);
-        setError("Failed to load boards. Please check your connection and try again.");
-        setLoading(false);
-    });
+    const setupListener = async () => {
+        setLoading(true);
+        try {
+            // First, ensure the user is a member of the workspace. This avoids a race condition.
+            await ensureWorkspaceExists(user.uid);
+
+            // Now, set up the listener.
+            const boardsQuery = query(collection(db, `workspaces/${workspaceId}/boards`));
+            unsubscribe = onSnapshot(boardsQuery, (querySnapshot) => {
+                const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+                setBoards(boardsData);
+                setError(null);
+                setLoading(false);
+            }, (err) => {
+                console.error("Error fetching boards:", err);
+                setError("Failed to load boards. Please check your permissions and try again.");
+                setLoading(false);
+            });
+        } catch (e) {
+             setError("An unexpected error occurred during setup.");
+             setLoading(false);
+        }
+    };
+    
+    setupListener();
 
     return () => unsubscribe();
   }, [user, workspaceId, ensureWorkspaceExists]);
@@ -234,5 +248,3 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
     </div>
   )
 }
-
-    
