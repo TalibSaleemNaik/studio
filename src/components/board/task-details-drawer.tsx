@@ -30,6 +30,7 @@ import { format } from 'date-fns';
 import { Task, ChecklistItem, Comment, BoardMember, Attachment } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
+import { logActivity } from '@/lib/activity-logger';
 
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
@@ -46,6 +47,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     const { user } = useAuth();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = React.useState(false);
+    const [originalTask, setOriginalTask] = React.useState(task);
     const [editedTask, setEditedTask] = React.useState(task);
     const [isGeneratingTags, setIsGeneratingTags] = React.useState(false);
     const [newTag, setNewTag] = React.useState("");
@@ -63,6 +65,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     
     React.useEffect(() => {
         setEditedTask(task);
+        setOriginalTask(task); // Keep track of the original task state
         if (task && workspaceId && boardId) {
             const commentsQuery = query(
                 collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`),
@@ -76,24 +79,39 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         }
     }, [task, workspaceId, boardId]);
 
-    const handleUpdate = async (field: keyof Task, value: any) => {
-        if (!task) return;
-        const updatedTask = { ...editedTask, [field]: value };
-        setEditedTask(updatedTask); // Optimistic update of local state
-
+    const handleFieldUpdate = async (field: keyof Task, value: any, logMessage?: string) => {
+        if (!task || !user) return;
+        
         try {
             const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
             await updateDoc(taskRef, { [field]: value });
+            if (logMessage) {
+                await logActivity(workspaceId, boardId, user, logMessage, task.id);
+            }
         } catch (error) {
-            console.error("Failed to update task:", error);
-            toast({ variant: 'destructive', title: 'Failed to update task' });
-            setEditedTask(task); // Revert on failure
+            console.error(`Failed to update task ${field}:`, error);
+            toast({ variant: 'destructive', title: `Failed to update ${field}` });
+            // Revert local state on failure
+            setEditedTask(originalTask);
+        }
+    };
+    
+    const handleBlurUpdate = (field: keyof Task, logTemplate: (oldVal: any, newVal: any) => string) => {
+        const oldValue = originalTask[field];
+        const newValue = editedTask[field];
+        if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+            const logMessage = logTemplate(oldValue, newValue);
+            handleFieldUpdate(field, newValue, logMessage);
         }
     };
     
     const handleDateSelect = (date: Date | undefined) => {
         if (!date) return;
-        handleUpdate('dueDate', date);
+        const oldDate = originalTask.dueDate ? format(asJsDate(originalTask.dueDate), "PPP") : "no date";
+        const newDate = format(date, "PPP");
+        const logMessage = `set the due date for task "${editedTask.content}" to ${newDate} (from ${oldDate}).`;
+        setEditedTask({...editedTask, dueDate: date});
+        handleFieldUpdate('dueDate', date, logMessage);
     };
 
     const getDisplayDate = () => {
@@ -103,6 +121,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
 
     const handleDelete = async () => {
         try {
+            if (!user) throw new Error("User not authenticated.");
+            const taskToDelete = { ...editedTask }; // Capture state before deletion
             const batch = writeBatch(db);
 
             // Delete attachments from Storage
@@ -120,6 +140,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
             batch.delete(doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id));
             
             await batch.commit();
+            await logActivity(workspaceId, boardId, user, `deleted task "${taskToDelete.content}".`);
+
 
             toast({ title: 'Task deleted successfully' });
             onDelete(task.id);
@@ -139,7 +161,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
             if (result.suggestedTags) {
                 const currentTags = editedTask.tags || [];
                 const newTags = Array.from(new Set([...currentTags, ...result.suggestedTags]));
-                handleUpdate('tags', newTags);
+                handleFieldUpdate('tags', newTags, `added AI-suggested labels to task "${editedTask.content}".`);
+                setEditedTask({...editedTask, tags: newTags});
             }
         } catch (error) {
             console.error("Failed to generate tags:", error);
@@ -152,28 +175,36 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     const handleAddTag = async (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && newTag.trim() && task) {
             e.preventDefault();
-            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
-            await updateDoc(taskRef, {
-                tags: arrayUnion(newTag.trim())
-            });
+            const newTags = [...(editedTask.tags || []), newTag.trim()];
+            setEditedTask({...editedTask, tags: newTags});
+            handleFieldUpdate('tags', arrayUnion(newTag.trim()), `added label "${newTag.trim()}" to task "${editedTask.content}".`);
             setNewTag("");
         }
     };
 
     const handleRemoveTag = async (tagToRemove: string) => {
         if (!task) return;
-        const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
-        await updateDoc(taskRef, {
-            tags: arrayRemove(tagToRemove)
-        });
+        const newTags = editedTask.tags?.filter(t => t !== tagToRemove);
+        setEditedTask({...editedTask, tags: newTags});
+        handleFieldUpdate('tags', arrayRemove(tagToRemove), `removed label "${tagToRemove}" from task "${editedTask.content}".`);
     };
     
     const toggleAssignee = (uid: string) => {
+        const member = boardMembers.find(m => m.uid === uid);
+        if (!member) return;
+
         const currentAssignees = editedTask.assignees || [];
-        const newAssignees = currentAssignees.includes(uid)
+        const isAssigned = currentAssignees.includes(uid);
+        const newAssignees = isAssigned
             ? currentAssignees.filter(id => id !== uid)
             : [...currentAssignees, uid];
-        handleUpdate('assignees', newAssignees);
+
+        const logMessage = isAssigned
+            ? `unassigned ${member.displayName} from task "${editedTask.content}".`
+            : `assigned ${member.displayName} to task "${editedTask.content}".`;
+        
+        setEditedTask({...editedTask, assignees: newAssignees});
+        handleFieldUpdate('assignees', newAssignees, logMessage);
     };
     
     const handlePostComment = async (e: React.FormEvent) => {
@@ -190,6 +221,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                 authorPhotoURL: user.photoURL || '',
                 createdAt: serverTimestamp(),
             });
+            await logActivity(workspaceId, boardId, user, `commented on task "${editedTask.content}": "${newComment}"`, task.id);
             setNewComment('');
         } catch (error) {
             console.error("Failed to post comment:", error);
@@ -208,7 +240,8 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                 completed: false,
             };
             const newChecklist = [...(editedTask.checklist || []), newItem];
-            handleUpdate('checklist', newChecklist);
+            setEditedTask({...editedTask, checklist: newChecklist});
+            handleFieldUpdate('checklist', newChecklist, `added checklist item "${newItem.text}" to task "${editedTask.content}".`);
             setNewChecklistItem("");
         }
     };
@@ -217,16 +250,28 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         const newChecklist = editedTask.checklist?.map(item =>
             item.id === itemId ? { ...item, completed: !item.completed } : item
         );
-        handleUpdate('checklist', newChecklist);
+        setEditedTask({...editedTask, checklist: newChecklist});
+
+        const item = editedTask.checklist?.find(i => i.id === itemId);
+        if(item){
+            const logMessage = item.completed
+                ? `unchecked item "${item.text}" in task "${editedTask.content}".`
+                : `checked off item "${item.text}" in task "${editedTask.content}".`;
+            handleFieldUpdate('checklist', newChecklist, logMessage);
+        }
     };
 
     const handleDeleteChecklistItem = (itemId: string) => {
-        const newChecklist = editedTask.checklist?.filter(item => item.id !== itemId);
-        handleUpdate('checklist', newChecklist);
+        const item = editedTask.checklist?.find(i => i.id === itemId);
+        const newChecklist = editedTask.checklist?.filter(i => i.id !== itemId);
+        setEditedTask({...editedTask, checklist: newChecklist});
+        if(item){
+            handleFieldUpdate('checklist', newChecklist, `deleted checklist item "${item.text}" from task "${editedTask.content}".`);
+        }
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || e.target.files.length === 0) return;
+        if (!e.target.files || e.target.files.length === 0 || !user) return;
         const file = e.target.files[0];
         setIsUploading(true);
         toast({ title: 'Uploading file...' });
@@ -246,10 +291,9 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                 createdAt: serverTimestamp(),
             };
 
-            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
-            await updateDoc(taskRef, {
-                attachments: arrayUnion(newAttachment)
-            });
+            await handleFieldUpdate('attachments', arrayUnion(newAttachment), `attached file "${file.name}" to task "${editedTask.content}".`);
+            setEditedTask(prev => ({...prev, attachments: [...(prev.attachments || []), newAttachment]}));
+
 
             toast({ title: 'File uploaded successfully!' });
         } catch (error) {
@@ -264,15 +308,14 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     const handleDeleteAttachment = async (attachmentToDelete: Attachment) => {
         toast({ title: 'Deleting attachment...' });
         try {
+            if (!user) throw new Error("User not authenticated.");
             // Delete from storage
             const fileRef = ref(storage, attachmentToDelete.path);
             await deleteObject(fileRef);
 
             // Remove from Firestore
-            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
-            await updateDoc(taskRef, {
-                attachments: arrayRemove(attachmentToDelete)
-            });
+            await handleFieldUpdate('attachments', arrayRemove(attachmentToDelete), `removed attachment "${attachmentToDelete.name}" from task "${editedTask.content}".`);
+            setEditedTask(prev => ({...prev, attachments: prev.attachments?.filter(att => att.id !== attachmentToDelete.id)}));
 
             toast({ title: 'Attachment deleted.' });
         } catch (error) {
@@ -298,8 +341,9 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                              <Input 
                                 id="task-title"
                                 value={editedTask.content}
+                                onFocus={() => setOriginalTask(editedTask)}
                                 onChange={(e) => setEditedTask({...editedTask, content: e.target.value})}
-                                onBlur={() => handleUpdate('content', editedTask.content)}
+                                onBlur={() => handleBlurUpdate('content', (oldVal, newVal) => `renamed task to "${newVal}" (from "${oldVal}")`)}
                                 className="text-lg font-semibold"
                             />
                         </div>
@@ -310,8 +354,9 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                                 id="task-description"
                                 placeholder="Add a more detailed description..."
                                 value={editedTask.description || ''}
+                                onFocus={() => setOriginalTask(editedTask)}
                                 onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
-                                onBlur={() => handleUpdate('description', editedTask.description)}
+                                onBlur={() => handleBlurUpdate('description', (oldVal, newVal) => `updated the description for task "${editedTask.content}"`)}
                                 rows={6}
                              />
                         </div>
@@ -346,7 +391,11 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                                 <Label>Priority</Label>
                                 <Select
                                     value={editedTask.priority}
-                                    onValueChange={(value) => handleUpdate('priority', value as Task['priority'])}
+                                    onValueChange={(value) => {
+                                        const logMessage = `set priority for task "${editedTask.content}" to ${value}.`;
+                                        setEditedTask({...editedTask, priority: value as Task['priority']});
+                                        handleFieldUpdate('priority', value as Task['priority'], logMessage);
+                                    }}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Set priority" />
@@ -616,3 +665,6 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         </Sheet>
     );
 }
+
+
+    

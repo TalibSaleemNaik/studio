@@ -4,11 +4,11 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
-import { Loader2, Share, Search, ChevronDown, Trash2 } from 'lucide-react';
+import { Loader2, Share, Search, ChevronDown, Trash2, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, deleteDoc, arrayUnion, arrayRemove, getDoc, getDocs, deleteField } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, deleteDoc, getDoc, getDocs, deleteField } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -23,11 +23,14 @@ import { Task, Columns, BoardMember } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
+import { logActivity } from '@/lib/activity-logger';
+import { ActivityDrawer } from './board/activity-drawer';
 
 function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceId: string, boardId: string, boardMembers: BoardMember[] }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
+    const { user } = useAuth();
 
     const handleInvite = async () => {
         const trimmedEmail = inviteEmail.trim();
@@ -50,8 +53,9 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
                 return;
             }
 
-            const userToInvite = querySnapshot.docs[0];
-            const userId = userToInvite.id;
+            const userToInviteDoc = querySnapshot.docs[0];
+            const userToInvite = userToInviteDoc.data();
+            const userId = userToInviteDoc.id;
 
             if (boardMembers.some(member => member.uid === userId)) {
                 toast({ variant: 'destructive', title: 'User is already a member of this board.' });
@@ -63,6 +67,10 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
             await updateDoc(boardRef, {
                 [`members.${userId}`]: 'editor'
             });
+            
+            if (user) {
+                await logActivity(workspaceId, boardId, user, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
+            }
 
             toast({ title: 'User invited successfully!' });
             setInviteEmail('');
@@ -92,9 +100,15 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     const handleRemoveMember = async (memberId: string) => {
         try {
             const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            const memberToRemove = boardMembers.find(m => m.uid === memberId);
             await updateDoc(boardRef, {
                 [`members.${memberId}`]: deleteField()
             });
+
+            if (user && memberToRemove) {
+                 await logActivity(workspaceId, boardId, user, `removed ${memberToRemove.displayName} from the board.`);
+            }
+
              toast({ title: 'Member removed.' });
         } catch (error) {
             console.error("Error removing member:", error);
@@ -176,6 +190,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
 function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId: string, boardId: string }) {
     const [isEditing, setIsEditing] = React.useState(false);
     const [boardName, setBoardName] = React.useState(name);
+    const { user } = useAuth();
     const { toast } = useToast();
 
     React.useEffect(() => {
@@ -192,6 +207,9 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
         try {
             const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
             await updateDoc(boardRef, { name: boardName });
+            if (user) {
+                 await logActivity(workspaceId, boardId, user, `renamed the board to "${boardName}" (from "${name}")`);
+            }
             toast({ title: 'Board name updated.' });
         } catch (error) {
             console.error("Error updating board name:", error);
@@ -241,6 +259,7 @@ function Board({ boardId }: { boardId: string }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedAssignees, setSelectedAssignees] = React.useState<string[]>([]);
   const [selectedLabels, setSelectedLabels] = React.useState<string[]>([]);
+  const [isActivityDrawerOpen, setIsActivityDrawerOpen] = React.useState(false);
   const { toast } = useToast();
 
   const workspaceId = 'default-workspace';
@@ -365,8 +384,8 @@ function Board({ boardId }: { boardId: string }) {
 
 
   const onDragEnd = async (result: DropResult) => {
-    const { source, destination, type } = result;
-    if (!destination || !columns) return;
+    const { source, destination, type, draggableId } = result;
+    if (!destination || !columns || !user) return;
 
 
     if (type === 'COLUMN') {
@@ -417,6 +436,9 @@ function Board({ boardId }: { boardId: string }) {
       
       const movedTaskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, removed.id);
       batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
+      
+      const task = columns[source.droppableId].items[source.index];
+      logActivity(workspaceId, boardId, user, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
 
       sourceItems.forEach((item, index) => {
         const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
@@ -591,6 +613,10 @@ function Board({ boardId }: { boardId: string }) {
                 )}
              </div>
             <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setIsActivityDrawerOpen(true)}>
+                    <History className="mr-2 h-4 w-4" />
+                    Activity
+                </Button>
                 <BoardMembersDialog workspaceId={workspaceId} boardId={boardId} boardMembers={boardMembers} />
                 <CreateGroupDialog 
                     workspaceId={workspaceId}
@@ -610,6 +636,12 @@ function Board({ boardId }: { boardId: string }) {
                 onDelete={handleTaskDeleted}
             />
         )}
+        <ActivityDrawer
+            workspaceId={workspaceId}
+            boardId={boardId}
+            isOpen={isActivityDrawerOpen}
+            onOpenChange={setIsActivityDrawerOpen}
+        />
         <DragDropContext onDragEnd={onDragEnd}>
             <Droppable droppableId="board" type="COLUMN" direction="horizontal">
             {(provided) => (
@@ -680,5 +712,7 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
 
     

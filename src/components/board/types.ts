@@ -59,3 +59,15 @@ export interface Comment {
   authorPhotoURL: string;
   createdAt: any; // Firestore Timestamp
 }
+
+export interface Activity {
+    id: string;
+    message: string;
+    authorId: string;
+    authorName: string;
+    authorPhotoURL: string;
+    taskId?: string;
+    timestamp: any; // Firestore Timestamp
+}
+
+    

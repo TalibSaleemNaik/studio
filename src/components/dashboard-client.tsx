@@ -18,6 +18,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
+import { logActivity } from "@/lib/activity-logger";
 
 interface Board {
   id: string;
@@ -75,6 +76,8 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
             }
             
             await batch.commit();
+
+            await logActivity(workspaceId, boardRef.id, user, `created the board "${title}"`);
 
             toast({ title: "Board created successfully!" });
             setIsOpen(false);
@@ -219,6 +222,10 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
       const groupsSnap = await getDocs(groupsRef);
       groupsSnap.docs.forEach(doc => batch.delete(doc.ref));
 
+      const activityRef = collection(db, `workspaces/${workspaceId}/boards/${boardToDelete.id}/activity`);
+      const activitySnap = await getDocs(activityRef);
+      activitySnap.docs.forEach(doc => batch.delete(doc.ref));
+
       const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardToDelete.id);
       batch.delete(boardRef);
 
@@ -316,3 +323,5 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
     </>
   )
 }
+
+    

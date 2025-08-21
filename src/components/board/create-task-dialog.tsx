@@ -10,27 +10,32 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth';
+import { logActivity } from '@/lib/activity-logger';
 
 export function CreateTaskDialog({ workspaceId, boardId, groupId, columnItemCount }: { workspaceId: string, boardId: string, groupId: string, columnItemCount: number }) {
     const [content, setContent] = React.useState('');
     const [isCreating, setIsCreating] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
     const { toast } = useToast();
+    const { user } = useAuth();
 
     const handleCreateTask = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!content.trim()) {
+        if (!content.trim() || !user) {
             toast({ variant: 'destructive', title: 'Task content cannot be empty' });
             return;
         }
         setIsCreating(true);
         try {
-            await addDoc(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), {
+            const taskRef = await addDoc(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), {
                 groupId: groupId,
                 content: content,
                 order: columnItemCount, // Add to the bottom of the list
                 createdAt: serverTimestamp(),
             });
+
+            await logActivity(workspaceId, boardId, user, `created task "${content}"`, taskRef.id);
 
             toast({ title: "Task created successfully!" });
             setContent('');
@@ -75,5 +80,7 @@ export function CreateTaskDialog({ workspaceId, boardId, groupId, columnItemCoun
         </Dialog>
     )
 }
+
+    
 
     
