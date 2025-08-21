@@ -317,7 +317,7 @@ function Board({ boardId }: { boardId: string }) {
 
 
   const onDragEnd = async (result: DropResult) => {
-    const { source, destination, type, draggableId } = result;
+    const { source, destination, type } = result;
     if (!destination || !columns || !user) return;
 
     if (type === 'COLUMN') {
@@ -348,16 +348,19 @@ function Board({ boardId }: { boardId: string }) {
     const [removed] = sourceItems.splice(source.index, 1);
 
     const newColumns = { ...columns };
-    const batch = writeBatch(db);
 
     if (sourceColId === destColId) {
       sourceItems.splice(destination.index, 0, removed);
       newColumns[sourceColId] = { ...startColumn, items: sourceItems };
       
+      setColumns(newColumns);
+      
+      const batch = writeBatch(db);
       sourceItems.forEach((item, index) => {
         const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
         batch.update(taskRef, { order: index });
       });
+      await batch.commit();
 
     } else {
       const destItems = [...endColumn.items];
@@ -366,8 +369,7 @@ function Board({ boardId }: { boardId: string }) {
       newColumns[sourceColId] = { ...startColumn, items: sourceItems };
       newColumns[destColId] = { ...endColumn, items: destItems };
       
-      const movedTaskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, removed.id);
-      batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
+      setColumns(newColumns);
       
       const task = columns[source.droppableId].items[source.index];
       const simpleUser: SimpleUser = {
@@ -375,8 +377,12 @@ function Board({ boardId }: { boardId: string }) {
             displayName: user.displayName,
             photoURL: user.photoURL,
         };
-      await logActivity(workspaceId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
+      logActivity(workspaceId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
 
+      const batch = writeBatch(db);
+      const movedTaskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, removed.id);
+      batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
+      
       sourceItems.forEach((item, index) => {
         const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
         batch.update(taskRef, { order: index });
@@ -385,15 +391,7 @@ function Board({ boardId }: { boardId: string }) {
          const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
          batch.update(taskRef, { order: index });
       });
-    }
-
-    setColumns(newColumns);
-    try {
-        await batch.commit();
-    } catch (error) {
-        console.error("Failed to reorder tasks:", error);
-        toast({ variant: 'destructive', title: 'Failed to save new order' });
-        setColumns(columns);
+      await batch.commit();
     }
   };
   
@@ -558,7 +556,7 @@ function Board({ boardId }: { boardId: string }) {
                         </Command>
                     </PopoverContent>
                 </Popover>
-                <Select value={dueDateFilter} onValuechange={setDueDateFilter}>
+                <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Filter by due date" />
                     </SelectTrigger>
@@ -671,5 +669,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
