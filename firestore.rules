@@ -1,5 +1,4 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
@@ -7,12 +6,15 @@ service cloud.firestore {
       allow write: if request.auth.uid == userId;
     }
 
-    match /workspaces/{workspaceId} {
-      allow get: if request.auth != null;
-    }
+    match /workspaces/{workspaceId}/boards/{boardId} {
+      allow get: if request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)/boards/$(boardId)).data.members;
+      allow list: if request.auth.uid in resource.data.members; // For dashboard query
+      allow create: if request.auth.uid == request.resource.data.ownerId;
+      allow update, delete: if request.auth.uid in resource.data.members && resource.data.members[request.auth.uid] == 'owner';
 
-    match /workspaces/{workspaceId}/boards/{boardId}/{document=**} {
-      allow read, write, delete: if request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)/boards/$(boardId)).data.members;
+      match /{document=**} {
+        allow read, write: if request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)/boards/$(boardId)).data.members;
+      }
     }
   }
 }
