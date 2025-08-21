@@ -8,7 +8,7 @@ import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus } from 'luci
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -558,7 +558,7 @@ function Board({ boardId }: { boardId: string }) {
                         </Command>
                     </PopoverContent>
                 </Popover>
-                <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+                <Select value={dueDateFilter} onValuechange={setDueDateFilter}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Filter by due date" />
                     </SelectTrigger>
