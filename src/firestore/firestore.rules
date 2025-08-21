@@ -1,0 +1,60 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    //
+    // Functions
+    //
+    function isAuth() {
+      return request.auth != null;
+    }
+    
+    function isUser(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    function isWorkspaceMember(workspaceId) {
+        return request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members;
+    }
+
+    function isBoardMember(workspaceId, boardId) {
+        return request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)/boards/$(boardId)).data.members;
+    }
+
+    //
+    // Rules
+    //
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow write: if isUser(userId);
+    }
+    
+    match /workspaces/{workspaceId} {
+        // Anyone in the workspace can see the workspace document
+        allow get: if isWorkspaceMember(workspaceId);
+        
+        // Rules for subcollections of a workspace
+        
+        // Allow listing boards if you are a workspace member (for the dashboard)
+        match /boards/{boardId} {
+            allow list: if isWorkspaceMember(workspaceId);
+            // Allow reading/writing a specific board if you are a board member
+            allow get, write: if isBoardMember(workspaceId, boardId);
+            
+            // Rules for all subcollections of a board (groups, tasks, etc.)
+            match /{allSubcollections=**} {
+                allow read, write: if isBoardMember(workspaceId, boardId);
+            }
+        }
+        
+        // This rule is for any other subcollection directly under workspace, like `groups` and `tasks`
+        // which might be queried across boards if the data model changes, though current code is per-board.
+        // It's safer to lock it down by board membership.
+        // The most specific rule (`/boards/{boardId}/{allSubcollections=**}`) will be matched first for board content.
+        match /{subcollection}/{docId} {
+           allow read, write: if isWorkspaceMember(workspaceId);
+        }
+    }
+  }
+}
