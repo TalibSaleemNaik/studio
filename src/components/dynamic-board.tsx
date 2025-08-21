@@ -216,7 +216,7 @@ function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId
                         }
                     }}
                     autoFocus
-                    className="text-3xl font-bold font-headline h-auto p-0 border-transparent focus-visible:ring-0"
+                    className="text-3xl font-bold font-headline h-auto p-0 border-transparent focus-visible:ring-0 bg-transparent"
                 />
             ) : (
                 <h1
