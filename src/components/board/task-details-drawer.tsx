@@ -356,7 +356,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                                 value={editedTask.description || ''}
                                 onFocus={() => setOriginalTask(editedTask)}
                                 onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
-                                onBlur={() => handleBlurUpdate('description', (oldVal, newVal) => `updated the description for task "${newVal}"`)}
+                                onBlur={() => handleBlurUpdate('description', (oldVal, newVal) => `updated the description for task "${editedTask.content}"`)}
                                 rows={6}
                              />
                         </div>
@@ -668,4 +668,6 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
 
 
     
+    
+
     
