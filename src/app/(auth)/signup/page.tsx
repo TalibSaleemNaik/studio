@@ -29,6 +29,7 @@ export default function SignupPage() {
       
       await updateProfile(user, { displayName: fullName });
 
+      // Create user document in Firestore
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         displayName: fullName,
@@ -56,6 +57,7 @@ export default function SignupPage() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
+      // Create or merge user document in Firestore
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         displayName: user.displayName,
