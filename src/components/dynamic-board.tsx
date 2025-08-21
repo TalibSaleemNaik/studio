@@ -173,9 +173,67 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     )
 }
 
+function BoardHeader({ name, workspaceId, boardId }: { name: string, workspaceId: string, boardId: string }) {
+    const [isEditing, setIsEditing] = React.useState(false);
+    const [boardName, setBoardName] = React.useState(name);
+    const { toast } = useToast();
+
+    React.useEffect(() => {
+        setBoardName(name);
+    }, [name]);
+
+    const handleNameChange = async () => {
+        if (boardName.trim() === '' || boardName === name) {
+            setBoardName(name);
+            setIsEditing(false);
+            return;
+        }
+
+        try {
+            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            await updateDoc(boardRef, { name: boardName });
+            toast({ title: 'Board name updated.' });
+        } catch (error) {
+            console.error("Error updating board name:", error);
+            toast({ variant: 'destructive', title: 'Failed to update board name.' });
+            setBoardName(name);
+        }
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="flex items-center justify-between mb-6">
+            {isEditing ? (
+                <Input
+                    value={boardName}
+                    onChange={(e) => setBoardName(e.target.value)}
+                    onBlur={handleNameChange}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleNameChange();
+                        if (e.key === 'Escape') {
+                            setBoardName(name);
+                            setIsEditing(false);
+                        }
+                    }}
+                    autoFocus
+                    className="text-3xl font-bold font-headline h-auto p-0 border-transparent focus-visible:ring-0"
+                />
+            ) : (
+                <h1
+                    className="text-3xl font-bold font-headline cursor-pointer"
+                    onClick={() => setIsEditing(true)}
+                >
+                    {boardName}
+                </h1>
+            )}
+        </div>
+    );
+}
+
 function Board({ boardId }: { boardId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
+  const [board, setBoard] = React.useState<{ name: string } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
@@ -224,6 +282,7 @@ function Board({ boardId }: { boardId: string }) {
             return;
         }
         
+        setBoard({ name: boardData.name });
         setError(null);
 
         // Fetch profiles for all members
@@ -396,7 +455,7 @@ function Board({ boardId }: { boardId: string }) {
     );
   }
   
-  if (!columns) {
+  if (!columns || !board) {
     return <BoardSkeleton />;
   }
 
@@ -440,6 +499,7 @@ function Board({ boardId }: { boardId: string }) {
 
   return (
       <>
+        <BoardHeader name={board.name} workspaceId={workspaceId} boardId={boardId} />
         <div className="flex items-center justify-between mb-4">
              <div className="flex items-center gap-2">
                 <div className="relative">
@@ -580,23 +640,39 @@ function Board({ boardId }: { boardId: string }) {
 
 function BoardSkeleton() {
   return (
-    <div className="flex items-start gap-6 h-full overflow-x-auto pb-4">
-      {['To Do', 'In Progress', 'Done'].map((name) => (
-        <div key={name} className="shrink-0 w-80">
-            <div className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-                <Skeleton className="h-6 w-24" />
-                <Skeleton className="h-6 w-8" />
-            </div>
-            <div className="space-y-4 flex-1 overflow-y-auto">
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-12 w-full" />
-            </div>
-            </div>
+    <>
+      <div className="flex items-center justify-between mb-6">
+        <Skeleton className="h-9 w-64" />
+      </div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-24" />
         </div>
-      ))}
-    </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+      </div>
+      <div className="flex items-start gap-6 h-full overflow-x-auto pb-4">
+        {['To Do', 'In Progress', 'Done'].map((name) => (
+          <div key={name} className="shrink-0 w-80">
+              <div className="bg-muted/60 rounded-xl p-4 h-full flex flex-col">
+              <div className="flex justify-between items-center mb-4">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-6 w-8" />
+              </div>
+              <div className="space-y-4 flex-1 overflow-y-auto">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-12 w-full" />
+              </div>
+              </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
 
