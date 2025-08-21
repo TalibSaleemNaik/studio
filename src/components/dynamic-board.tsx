@@ -8,7 +8,7 @@ import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus } from 'luci
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
+import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
 
 function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceId: string, boardId: string, boardMembers: BoardMember[] }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
@@ -208,6 +209,7 @@ function Board({ boardId }: { boardId: string }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedAssignees, setSelectedAssignees] = React.useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = React.useState<string[]>([]);
+  const [dueDateFilter, setDueDateFilter] = React.useState('any');
   const [isActivityDrawerOpen, setIsActivityDrawerOpen] = React.useState(false);
   const { toast } = useToast();
 
@@ -416,6 +418,8 @@ function Board({ boardId }: { boardId: string }) {
     return <BoardSkeleton />;
   }
 
+  const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
+
   const filteredColumns = Object.fromEntries(
     Object.entries(columns).map(([columnId, column]) => [
         columnId,
@@ -429,8 +433,22 @@ function Board({ boardId }: { boardId: string }) {
 
                 const priorityMatch = selectedPriorities.length === 0 ||
                     (item.priority && selectedPriorities.includes(item.priority));
+
+                const dueDateMatch = () => {
+                    if (dueDateFilter === 'any' || !item.dueDate) return true;
+                    const today = startOfToday();
+                    const taskDueDate = asJsDate(item.dueDate);
+                    if (dueDateFilter === 'overdue') {
+                        return isBefore(taskDueDate, today);
+                    }
+                    if (dueDateFilter === 'due-soon') {
+                        const threeDaysFromNow = addDays(today, 3);
+                        return isAfter(taskDueDate, today) && isBefore(taskDueDate, threeDaysFromNow);
+                    }
+                    return true;
+                };
                 
-                return searchMatch && assigneeMatch && priorityMatch;
+                return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
             })
         }
     ])
@@ -453,6 +471,15 @@ function Board({ boardId }: { boardId: string }) {
         : [...prev, priority]
     );
   };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedAssignees([]);
+    setSelectedPriorities([]);
+    setDueDateFilter('any');
+  }
+
+  const hasActiveFilters = searchTerm || selectedAssignees.length > 0 || selectedPriorities.length > 0 || dueDateFilter !== 'any';
 
   return (
       <>
@@ -531,8 +558,18 @@ function Board({ boardId }: { boardId: string }) {
                         </Command>
                     </PopoverContent>
                 </Popover>
-                {(selectedAssignees.length > 0 || selectedPriorities.length > 0) && (
-                    <Button variant="ghost" onClick={() => { setSelectedAssignees([]); setSelectedPriorities([]); }}>
+                <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Filter by due date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="any">Any time</SelectItem>
+                        <SelectItem value="due-soon">Due soon (3d)</SelectItem>
+                        <SelectItem value="overdue">Overdue</SelectItem>
+                    </SelectContent>
+                </Select>
+                {hasActiveFilters && (
+                    <Button variant="ghost" onClick={clearFilters}>
                         Clear filters
                     </Button>
                 )}
@@ -634,3 +671,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
