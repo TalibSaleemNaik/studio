@@ -31,6 +31,7 @@ import { Task, ChecklistItem, Comment, BoardMember, Attachment } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
 import { logActivity } from '@/lib/activity-logger';
+import type { User } from 'firebase/auth';
 
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
@@ -62,6 +63,16 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         const completedCount = editedTask.checklist.filter(item => item.completed).length;
         return (completedCount / editedTask.checklist.length) * 100;
     }, [editedTask.checklist]);
+
+    const getSimpleUser = (user: User | null) => {
+        if (!user) return null;
+        return {
+            uid: user.uid,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            email: user.email,
+        }
+    }
     
     React.useEffect(() => {
         setEditedTask(task);
@@ -106,7 +117,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
     
     const handleDateSelect = (date: Date | undefined) => {
-        if (!date) return;
+        if (!date || !user) return;
         const oldDate = originalTask.dueDate ? format(asJsDate(originalTask.dueDate), "PPP") : "no date";
         const newDate = format(date, "PPP");
         const logMessage = `set the due date for task "${editedTask.content}" to ${newDate} (from ${oldDate}).`;
@@ -154,6 +165,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     const handleGenerateTags = async () => {
         setIsGeneratingTags(true);
         try {
+             if (!user) throw new Error("User not authenticated.");
             const result = await suggestTaskTags({
                 title: editedTask.content,
                 description: editedTask.description,
@@ -173,7 +185,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     }
 
     const handleAddTag = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && newTag.trim() && task) {
+        if (e.key === 'Enter' && newTag.trim() && task && user) {
             e.preventDefault();
             const newTags = [...(editedTask.tags || []), newTag.trim()];
             setEditedTask({...editedTask, tags: newTags});
@@ -183,7 +195,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
 
     const handleRemoveTag = async (tagToRemove: string) => {
-        if (!task) return;
+        if (!task || !user) return;
         const newTags = editedTask.tags?.filter(t => t !== tagToRemove);
         setEditedTask({...editedTask, tags: newTags});
         handleFieldUpdate('tags', arrayRemove(tagToRemove), `removed label "${tagToRemove}" from task "${editedTask.content}".`);
@@ -191,7 +203,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     
     const toggleAssignee = (uid: string) => {
         const member = boardMembers.find(m => m.uid === uid);
-        if (!member) return;
+        if (!member || !user) return;
 
         const currentAssignees = editedTask.assignees || [];
         const isAssigned = currentAssignees.includes(uid);
@@ -232,7 +244,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
 
     const handleAddChecklistItem = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && newChecklistItem.trim()) {
+        if (e.key === 'Enter' && newChecklistItem.trim() && user) {
             e.preventDefault();
             const newItem: ChecklistItem = {
                 id: new Date().toISOString(),
@@ -247,6 +259,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
     
     const toggleChecklistItem = (itemId: string) => {
+        if (!user) return;
         const newChecklist = editedTask.checklist?.map(item =>
             item.id === itemId ? { ...item, completed: !item.completed } : item
         );
@@ -262,6 +275,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     };
 
     const handleDeleteChecklistItem = (itemId: string) => {
+        if(!user) return;
         const item = editedTask.checklist?.find(i => i.id === itemId);
         const newChecklist = editedTask.checklist?.filter(i => i.id !== itemId);
         setEditedTask({...editedTask, checklist: newChecklist});
@@ -356,7 +370,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                                 value={editedTask.description || ''}
                                 onFocus={() => setOriginalTask(editedTask)}
                                 onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
-                                onBlur={() => handleBlurUpdate('description', (oldVal, newVal) => `updated the description for task "${editedTask.content}"`)}
+                                onBlur={() => handleBlurUpdate('description', () => `updated the description for task "${editedTask.content}"`)}
                                 rows={6}
                              />
                         </div>
@@ -665,9 +679,3 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         </Sheet>
     );
 }
-
-
-    
-    
-
-    
