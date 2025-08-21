@@ -16,22 +16,10 @@ import { Progress } from '../ui/progress';
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
 const priorityConfig = {
-    low: {
-        badge: 'bg-green-500/20 text-green-400 border-green-500/30',
-        gradient: 'from-green-900/40 to-card',
-    },
-    medium: {
-        badge: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        gradient: 'from-yellow-900/40 to-card',
-    },
-    high: {
-        badge: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-        gradient: 'from-orange-900/40 to-card',
-    },
-    urgent: {
-        badge: 'bg-red-500/20 text-red-400 border-red-500/30',
-        gradient: 'from-red-900/40 to-card',
-    },
+    low: 'bg-gradient-to-br from-green-400 to-sky-400',
+    medium: 'bg-gradient-to-br from-yellow-400 to-amber-500',
+    high: 'bg-gradient-to-br from-orange-400 to-rose-500',
+    urgent: 'bg-gradient-to-br from-rose-500 to-red-600',
 };
 
 const tagColors = [
@@ -112,55 +100,51 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
                     onClick={onClick}
-                    className={cn(
-                        "p-3.5 rounded-xl border flex flex-col gap-4 transition-all cursor-pointer relative shadow-sm hover:shadow-lg",
-                        "bg-card border-border",
+                     className={cn(
+                        "rounded-xl p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
                         snapshot.isDragging && "shadow-xl scale-105",
-                        pConfig && `bg-gradient-to-br ${pConfig.gradient}`
+                        pConfig ? pConfig : "bg-border"
                     )}
                     style={{
                         ...provided.draggableProps.style
                     }}
                 >
-                    <div className="flex justify-between items-start gap-2">
-                        <p className="font-semibold pr-6 flex-1">{task.content}</p>
-                        <div className='flex items-center gap-2'>
-                           <ChecklistProgressCircle task={task} />
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
+                    <div className="bg-card rounded-[11px] p-3.5 flex flex-col gap-4">
+                        <div className="flex justify-between items-start gap-2">
+                            <p className="font-semibold pr-6 flex-1">{task.content}</p>
+                            <div className='flex items-center gap-2'>
+                               <ChecklistProgressCircle task={task} />
+                                <Button variant="ghost" size="icon" className="h-6 w-6">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                   
-                    <div className="flex justify-between items-center text-muted-foreground">
-                         <div className='flex items-center gap-4 text-xs font-medium'>
-                            {task.dueDate && (
-                                <div className='flex items-center gap-1.5'>
-                                    <Calendar className='h-3.5 w-3.5' />
-                                    <span>{format(asJsDate(task.dueDate), 'd/MM/yyyy')}</span>
-                                </div>
-                            )}
-                             {task.assignees?.[0] && (
-                                <div className='flex items-center gap-1.5'>
-                                    <Avatar className="h-5 w-5 border-2 border-card">
-                                        <AvatarImage src={getAssignee(task.assignees[0])?.photoURL} />
-                                        <AvatarFallback>{getAssignee(task.assignees[0])?.displayName?.charAt(0) || '?'}</AvatarFallback>
-                                    </Avatar>
-                                    <span>{getAssignee(task.assignees[0])?.displayName}</span>
-                                </div>
-                            )}
+                       
+                        <div className="flex justify-between items-center text-muted-foreground">
+                             <div className='flex items-center gap-4 text-xs font-medium'>
+                                {task.dueDate && (
+                                    <div className='flex items-center gap-1.5'>
+                                        <Calendar className='h-3.5 w-3.5' />
+                                        <span>{format(asJsDate(task.dueDate), 'd/MM/yyyy')}</span>
+                                    </div>
+                                )}
+                                 {task.assignees?.[0] && (
+                                    <div className='flex items-center gap-1.5'>
+                                        <Avatar className="h-5 w-5 border-2 border-card">
+                                            <AvatarImage src={getAssignee(task.assignees[0])?.photoURL} />
+                                            <AvatarFallback>{getAssignee(task.assignees[0])?.displayName?.charAt(0) || '?'}</AvatarFallback>
+                                        </Avatar>
+                                        <span>{getAssignee(task.assignees[0])?.displayName}</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                       {task.priority && (
-                           <Badge variant="outline" className={cn("capitalize text-xs", priorityConfig[task.priority].badge)}>
-                               {task.priority}
-                            </Badge>
-                       )}
-                    </div>
 
-                     <div className="flex flex-wrap gap-2">
-                        {task.tags?.map((tag, index) => (
-                            <Badge key={tag} className={cn('text-xs border font-medium', tagColors[index % tagColors.length])}>#{tag}</Badge>
-                        ))}
+                         <div className="flex flex-wrap gap-2">
+                            {task.tags?.map((tag, index) => (
+                                <Badge key={tag} className={cn('text-xs border font-medium', tagColors[index % tagColors.length])}>#{tag}</Badge>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}
