@@ -1,7 +1,7 @@
 
 import { DynamicBoard } from "@/components/dynamic-board";
 
-export default function BoardPage({ params }: { params: { boardId: string } }) {
+export default async function BoardPage({ params }: { params: { boardId: string } }) {
   const { boardId } = params;
   return (
     <div className="h-full flex flex-col">
