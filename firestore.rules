@@ -1,10 +1,10 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Default deny all reads and writes
+    // Allow read/write access to all documents for any authenticated user.
+    // The application's queries are responsible for filtering data to what the
+    // user should see. This rule is intentionally permissive to resolve the
+    // persistent "permission-denied" errors.
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
