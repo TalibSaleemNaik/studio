@@ -17,7 +17,12 @@ const SidebarContext = React.createContext<SidebarContextProps | undefined>(
 )
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = React.useState(false)
+  const isMobile = useIsMobile()
+  const [isOpen, setIsOpen] = React.useState(!isMobile)
+
+  React.useEffect(() => {
+    setIsOpen(!isMobile)
+  }, [isMobile])
 
   return (
     <SidebarContext.Provider value={{ isOpen, setIsOpen }}>
@@ -45,9 +50,8 @@ const Sidebar = React.forwardRef<
     <aside
       ref={ref}
       className={cn(
-        "flex h-screen flex-col transition-all duration-300 ease-in-out",
-        isMobile ? "fixed z-50 bg-background" : "relative",
-        isMobile && !isOpen ? "w-0" : "w-64",
+        "fixed left-0 top-0 z-40 h-screen w-72 flex-col border-r bg-background transition-transform duration-300 ease-in-out sm:flex",
+        isMobile && !isOpen && "-translate-x-full",
         className
       )}
       {...props}
@@ -63,7 +67,7 @@ const SidebarHeader = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("flex h-16 items-center border-b p-4", className)}
+      className={cn("flex h-14 items-center border-b px-6", className)}
       {...props}
     />
   )
@@ -100,18 +104,13 @@ SidebarFooter.displayName = "SidebarFooter"
 
 function SidebarTrigger({ className, ...props }: React.ComponentProps<typeof Button>) {
   const { isOpen, setIsOpen } = useSidebar()
-  const isMobile = useIsMobile()
-
-  if (!isMobile) {
-    return null
-  }
 
   return (
     <Button
       variant="ghost"
       size="icon"
       onClick={() => setIsOpen(!isOpen)}
-      className={cn("flex items-center justify-center", className)}
+      className={cn("flex items-center justify-center sm:hidden", className)}
       {...props}
     >
       {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -126,4 +125,5 @@ export {
   SidebarContent,
   SidebarFooter,
   SidebarTrigger,
+  useSidebar,
 }
