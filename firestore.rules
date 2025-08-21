@@ -1,12 +1,38 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to all documents for any authenticated user.
-    // The application's queries are responsible for filtering data to what the
-    // user should see. This rule is intentionally permissive to resolve the
-    // persistent "permission-denied" errors.
-    match /{document=**} {
+
+    // Helper function to check if the user is a member of a board
+    function isBoardMember(boardId) {
+      return get(/databases/$(database)/documents/workspaces/default-workspace/boards/$(boardId)).data.members[request.auth.uid] != null;
+    }
+
+    // Users can read other user profiles for invites, but only write to their own
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == userId;
+    }
+
+    // Workspaces can be read/written by any authenticated user for simplicity of board creation
+    match /workspaces/{workspaceId} {
       allow read, write: if request.auth != null;
+
+      // Rules for boards and their sub-collections (groups, tasks, comments)
+      match /boards/{boardId} {
+        allow read, write: if isBoardMember(boardId);
+
+        match /groups/{groupId} {
+          allow read, write: if isBoardMember(boardId);
+        }
+
+        match /tasks/{taskId} {
+          allow read, write: if isBoardMember(boardId);
+
+          match /comments/{commentId} {
+             allow read, write: if isBoardMember(boardId);
+          }
+        }
+      }
     }
   }
 }
