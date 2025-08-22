@@ -3,6 +3,7 @@
 import { DashboardClient } from "@/components/dashboard-client";
 
 export default function WorkpanelDashboardPage({ params }: { params: { workpanelId: string }}) {
+    const workpanelId = params.workpanelId;
     
     return (
         <div className="space-y-8">
@@ -14,7 +15,7 @@ export default function WorkpanelDashboardPage({ params }: { params: { workpanel
             </div>
             <div>
                 <DashboardClient 
-                    workpanelId={params.workpanelId}
+                    workpanelId={workpanelId}
                 />
             </div>
         </div>
