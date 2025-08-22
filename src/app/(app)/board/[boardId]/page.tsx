@@ -7,9 +7,12 @@ type PageProps = {
 };
 
 export default function BoardPage({ params, searchParams }: PageProps) {
+  const { boardId } = params;
+  const { workpanelId } = searchParams;
+
   return (
     <div className="h-full flex flex-col">
-      <DynamicBoard boardId={params.boardId} workpanelId={searchParams?.workpanelId} />
+      <DynamicBoard boardId={boardId} workpanelId={workpanelId} />
     </div>
   );
 }

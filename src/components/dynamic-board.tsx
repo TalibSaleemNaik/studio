@@ -201,7 +201,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
     )
 }
 
-function Board({ boardId, workpanelId, params, searchParams }: { boardId: string, workpanelId: string, params: { boardId: string }, searchParams: { workpanelId?: string } }) {
+function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<BoardType | null>(null);
@@ -265,6 +265,10 @@ function Board({ boardId, workpanelId, params, searchParams }: { boardId: string
   React.useEffect(() => {
     if (!user || !boardId || !workpanelId) {
         setLoading(true);
+        if (!workpanelId) {
+          setError("Workpanel ID is missing. Please access this board from the dashboard.");
+          setLoading(false);
+        }
         return;
     }
 
@@ -364,7 +368,7 @@ function Board({ boardId, workpanelId, params, searchParams }: { boardId: string
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, type } = result;
-    if (!destination || !columns || !user) return;
+    if (!destination || !columns || !user || !workpanelId) return;
 
     const newColumnsState = { ...columns };
 
@@ -464,7 +468,7 @@ function Board({ boardId, workpanelId, params, searchParams }: { boardId: string
     );
   }
   
-  if (!columns || !board) {
+  if (!columns || !board || !workpanelId) {
     return <BoardSkeleton />;
   }
 
@@ -602,7 +606,7 @@ function Board({ boardId, workpanelId, params, searchParams }: { boardId: string
                 <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} />
                  {activeView === 'kanban' && (
                     <CreateGroupDialog 
-                        workspaceId={workpanelId}
+                        workpanelId={workpanelId}
                         boardId={boardId}
                         columnCount={orderedColumns.length}
                     />
