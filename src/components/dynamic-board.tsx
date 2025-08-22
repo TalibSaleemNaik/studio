@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogTrigger, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -201,7 +201,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
     )
 }
 
-function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string }) {
+function Board({ boardId, workpanelId, params, searchParams }: { boardId: string, workpanelId: string, params: { boardId: string }, searchParams: { workpanelId?: string } }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<BoardType | null>(null);
@@ -701,5 +701,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
