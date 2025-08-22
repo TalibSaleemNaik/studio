@@ -316,6 +316,50 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     };
 }, [user, boardId, workpanelId, toast]);
 
+  const allTasks = React.useMemo(() => columns ? Object.values(columns).flatMap(c => c.items) : [], [columns]);
+
+  const filteredTasks = React.useMemo(() => {
+    const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
+    
+    return allTasks.filter(item => {
+        const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const assigneeMatch = selectedAssignees.length === 0 || 
+            item.assignees?.some(assignee => selectedAssignees.includes(assignee));
+
+        const priorityMatch = selectedPriorities.length === 0 ||
+            (item.priority && selectedPriorities.includes(item.priority));
+
+        const dueDateMatch = () => {
+            if (dueDateFilter === 'any' || !item.dueDate) return true;
+            const today = startOfToday();
+            const taskDueDate = asJsDate(item.dueDate);
+            if (dueDateFilter === 'overdue') {
+                return isBefore(taskDueDate, today);
+            }
+            if (dueDateFilter === 'due-soon') {
+                const threeDaysFromNow = addDays(today, 3);
+                return isAfter(taskDueDate, today) && isBefore(taskDueDate, threeDaysFromNow);
+            }
+            return true;
+        };
+        
+        return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
+    });
+  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
+
+  const filteredColumns = React.useMemo(() => {
+      if (!columns) return {};
+      return Object.fromEntries(
+        Object.entries(columns).map(([columnId, column]) => [
+            columnId,
+            {
+                ...column,
+                items: column.items.filter(item => filteredTasks.some(t => t.id === item.id))
+            }
+        ])
+      );
+  }, [columns, filteredTasks]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, type } = result;
@@ -422,46 +466,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   if (!columns || !board) {
     return <BoardSkeleton />;
   }
-
-  const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
-
-  const allTasks = React.useMemo(() => Object.values(columns).flatMap(c => c.items), [columns]);
-
-  const filteredTasks = React.useMemo(() => allTasks.filter(item => {
-    const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const assigneeMatch = selectedAssignees.length === 0 || 
-        item.assignees?.some(assignee => selectedAssignees.includes(assignee));
-
-    const priorityMatch = selectedPriorities.length === 0 ||
-        (item.priority && selectedPriorities.includes(item.priority));
-
-    const dueDateMatch = () => {
-        if (dueDateFilter === 'any' || !item.dueDate) return true;
-        const today = startOfToday();
-        const taskDueDate = asJsDate(item.dueDate);
-        if (dueDateFilter === 'overdue') {
-            return isBefore(taskDueDate, today);
-        }
-        if (dueDateFilter === 'due-soon') {
-            const threeDaysFromNow = addDays(today, 3);
-            return isAfter(taskDueDate, today) && isBefore(taskDueDate, threeDaysFromNow);
-        }
-        return true;
-    };
-    
-    return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
-  }), [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
-  
-  const filteredColumns = Object.fromEntries(
-    Object.entries(columns).map(([columnId, column]) => [
-        columnId,
-        {
-            ...column,
-            items: column.items.filter(item => filteredTasks.some(t => t.id === item.id))
-        }
-    ])
-  );
 
   const orderedColumns = Object.values(filteredColumns).sort((a,b) => a.order - b.order);
 
