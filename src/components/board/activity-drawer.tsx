@@ -14,12 +14,12 @@ import { Skeleton } from '../ui/skeleton';
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
 export function ActivityDrawer({
-    workspaceId,
+    workpanelId,
     boardId,
     isOpen,
     onOpenChange,
 }: {
-    workspaceId: string;
+    workpanelId: string;
     boardId: string;
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
@@ -32,7 +32,7 @@ export function ActivityDrawer({
 
         setLoading(true);
         const activityQuery = query(
-            collection(db, `workspaces/${workspaceId}/boards/${boardId}/activity`),
+            collection(db, `workspaces/${workpanelId}/boards/${boardId}/activity`),
             orderBy('timestamp', 'desc'),
             limit(20)
         );
@@ -47,7 +47,7 @@ export function ActivityDrawer({
         });
 
         return () => unsubscribe();
-    }, [isOpen, workspaceId, boardId]);
+    }, [isOpen, workpanelId, boardId]);
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -105,5 +105,3 @@ export function ActivityDrawer({
         </Sheet>
     );
 }
-
-    

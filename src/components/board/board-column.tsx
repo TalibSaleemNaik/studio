@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
 
-function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspaceId: string, boardId: string}) {
+function ColumnMenu({ column, workpanelId, boardId }: { column: Column, workpanelId: string, boardId: string}) {
     const { toast } = useToast();
     const { user } = useAuth();
     const [isRenameOpen, setIsRenameOpen] = React.useState(false);
@@ -35,14 +35,14 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
             return;
         }
         try {
-            await updateDoc(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, column.id), { name: newName });
+            await updateDoc(doc(db, `workspaces/${workpanelId}/boards/${boardId}/groups`, column.id), { name: newName });
              if (user) {
                 const simpleUser: SimpleUser = {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workspaceId, boardId, simpleUser, `renamed list to "${newName}" (from "${originalName}")`);
+                await logActivity(workpanelId, boardId, simpleUser, `renamed list to "${newName}" (from "${originalName}")`);
             }
             toast({ title: "List renamed" });
             setOriginalName(newName);
@@ -58,10 +58,10 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
         const batch = writeBatch(db);
         
         // Delete the group itself
-        batch.delete(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, column.id));
+        batch.delete(doc(db, `workspaces/${workpanelId}/boards/${boardId}/groups`, column.id));
 
         // Delete all tasks within that group
-        const tasksQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), where('groupId', '==', column.id));
+        const tasksQuery = query(collection(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`), where('groupId', '==', column.id));
         
         try {
             const tasksSnapshot = await getDocs(tasksQuery);
@@ -76,7 +76,7 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workspaceId, boardId, simpleUser, `deleted list "${column.name}"`);
+                await logActivity(workpanelId, boardId, simpleUser, `deleted list "${column.name}"`);
             }
             toast({ title: "List deleted" });
         } catch (error) {
@@ -143,7 +143,7 @@ function ColumnMenu({ column, workspaceId, boardId }: { column: Column, workspac
     )
 }
 
-function QuickAdd({ column, workspaceId, boardId }: { column: Column, workspaceId: string, boardId: string }) {
+function QuickAdd({ column, workpanelId, boardId }: { column: Column, workpanelId: string, boardId: string }) {
     const [content, setContent] = React.useState('');
     const { toast } = useToast();
     const { user } = useAuth();
@@ -155,7 +155,7 @@ function QuickAdd({ column, workspaceId, boardId }: { column: Column, workspaceI
         }
         
         try {
-            const taskRef = await addDoc(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`), {
+            const taskRef = await addDoc(collection(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`), {
                 groupId: column.id,
                 content: content,
                 order: column.items.length,
@@ -168,7 +168,7 @@ function QuickAdd({ column, workspaceId, boardId }: { column: Column, workspaceI
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workspaceId, boardId, simpleUser, `created task "${content}"`, taskRef.id);
+                await logActivity(workpanelId, boardId, simpleUser, `created task "${content}"`, taskRef.id);
             }
             setContent('');
         } catch (error: any) {
@@ -201,7 +201,7 @@ const columnColors = [
     'bg-indigo-500',
 ];
 
-export function BoardColumn({ column, index, boardMembers, onTaskClick, workspaceId, boardId }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workspaceId: string; boardId: string; }) {
+export function BoardColumn({ column, index, boardMembers, onTaskClick, workpanelId, boardId }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workpanelId: string; boardId: string; }) {
     const color = columnColors[index % columnColors.length];
     
     return (
@@ -222,7 +222,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
                                 <h2 className="text-md font-semibold text-foreground/90">{column.name}</h2>
                                 <span className="text-sm font-medium bg-background px-2 py-0.5 rounded-md text-muted-foreground">{column.items.length}</span>
                             </div>
-                            <ColumnMenu column={column} workspaceId={workspaceId} boardId={boardId} />
+                            <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} />
                         </div>
                         <Droppable droppableId={column.id} type="TASK">
                             {(provided, snapshot) => (
@@ -248,7 +248,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workspac
                                         ))}
                                         {provided.placeholder}
                                     </div>
-                                    <QuickAdd column={column} workspaceId={workspaceId} boardId={boardId} />
+                                    <QuickAdd column={column} workpanelId={workpanelId} boardId={boardId} />
                                 </div>
                             )}
                         </Droppable>

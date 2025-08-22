@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -25,7 +26,7 @@ interface Board {
   description: string;
 }
 
-function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: string, onBoardCreated: () => void }) {
+function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: string, onBoardCreated: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [title, setTitle] = useState('');
@@ -43,8 +44,8 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
         setIsCreating(true);
         try {
             const batch = writeBatch(db);
-            const workspaceRef = doc(db, `workspaces/${workspaceId}`);
-            const boardRef = doc(collection(db, `workspaces/${workspaceId}/boards`));
+            const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+            const boardRef = doc(collection(db, `workspaces/${workpanelId}/boards`));
             
             const boardMembers = { [user.uid]: 'owner' };
 
@@ -57,8 +58,8 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                 members: boardMembers // <-- Add members to the board
             });
 
-            // Ensure user is a member of the workspace itself
-            batch.set(workspaceRef, {
+            // Ensure user is a member of the workpanel itself
+            batch.set(workpanelRef, {
                 members: {
                     [user.uid]: 'owner'
                 }
@@ -67,7 +68,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
-                const groupRef = doc(collection(db, `workspaces/${workspaceId}/boards/${boardRef.id}/groups`));
+                const groupRef = doc(collection(db, `workspaces/${workpanelId}/boards/${boardRef.id}/groups`));
                 batch.set(groupRef, {
                     name: defaultGroups[i],
                     order: i,
@@ -81,7 +82,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                 displayName: user.displayName,
                 photoURL: user.photoURL,
             };
-            await logActivity(workspaceId, boardRef.id, simpleUser, `created the board "${title}"`);
+            await logActivity(workpanelId, boardRef.id, simpleUser, `created the board "${title}"`);
 
             toast({ title: "Board created successfully!" });
             setIsOpen(false);
@@ -103,7 +104,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
                     <CardContent className="p-6 text-center">
                         <div className="flex flex-col h-auto gap-2 items-center">
                         <PlusCircle className="h-8 w-8 text-muted-foreground" />
-                        <span className="text-sm font-medium">New Board</span>
+                        <span className="text-sm font-medium">New Teamboard</span>
                         </div>
                     </CardContent>
                 </Card>
@@ -111,9 +112,9 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
             <DialogContent className="sm:max-w-[425px]">
                 <form onSubmit={handleAction}>
                     <DialogHeader>
-                        <DialogTitle>Create New Board</DialogTitle>
+                        <DialogTitle>Create New Teamboard</DialogTitle>
                         <DialogDescription>
-                            Give your new board a title and description. Three default lists (To Do, In Progress, Done) will be created for you.
+                            Give your new teamboard a title and description. Three default lists (To Do, In Progress, Done) will be created for you.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -141,7 +142,7 @@ function CreateBoardDialog({ workspaceId, onBoardCreated }: { workspaceId: strin
     )
 }
 
-export function DashboardClient({ workspaceId }: { workspaceId: string }) {
+export function DashboardClient({ workpanelId }: { workpanelId: string }) {
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -153,19 +154,19 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const ensureWorkspaceExists = useCallback(async (uid: string) => {
-    if (!uid || !workspaceId) return;
+    if (!uid || !workpanelId) return;
     try {
-        const workspaceRef = doc(db, `workspaces/${workspaceId}`);
+        const workspaceRef = doc(db, `workspaces/${workpanelId}`);
         await setDoc(workspaceRef, { 
             name: "Default Workspace", 
             ownerId: uid,
             members: { [uid]: 'owner' }
         }, { merge: true });
     } catch(e) {
-        console.error("Error ensuring workspace exists:", e);
-        setError("Failed to initialize your workspace. Please try again.");
+        console.error("Error ensuring workpanel exists:", e);
+        setError("Failed to initialize your workpanel. Please try again.");
     }
-  }, [workspaceId]);
+  }, [workpanelId]);
 
   useEffect(() => {
     if (!user) {
@@ -181,7 +182,7 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
             await ensureWorkspaceExists(user.uid);
 
             const boardsQuery = query(
-                collection(db, `workspaces/${workspaceId}/boards`),
+                collection(db, `workspaces/${workpanelId}/boards`),
                 where(`members.${user.uid}`, 'in', ['owner', 'editor', 'viewer'])
             );
             
@@ -204,7 +205,7 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
     setupListener();
 
     return () => unsubscribe();
-  }, [user, workspaceId, ensureWorkspaceExists]);
+  }, [user, workpanelId, ensureWorkspaceExists]);
 
   const openDeleteDialog = (board: Board) => {
     setBoardToDelete(board);
@@ -218,19 +219,19 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
     try {
       const batch = writeBatch(db);
       
-      const tasksRef = collection(db, `workspaces/${workspaceId}/boards/${boardToDelete.id}/tasks`);
+      const tasksRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/tasks`);
       const tasksSnap = await getDocs(tasksRef);
       tasksSnap.docs.forEach(doc => batch.delete(doc.ref));
 
-      const groupsRef = collection(db, `workspaces/${workspaceId}/boards/${boardToDelete.id}/groups`);
+      const groupsRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/groups`);
       const groupsSnap = await getDocs(groupsRef);
       groupsSnap.docs.forEach(doc => batch.delete(doc.ref));
 
-      const activityRef = collection(db, `workspaces/${workspaceId}/boards/${boardToDelete.id}/activity`);
+      const activityRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/activity`);
       const activitySnap = await getDocs(activityRef);
       activitySnap.docs.forEach(doc => batch.delete(doc.ref));
 
-      const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardToDelete.id);
+      const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardToDelete.id);
       batch.delete(boardRef);
 
       await batch.commit();
@@ -298,12 +299,12 @@ export function DashboardClient({ workspaceId }: { workspaceId: string }) {
                         </Avatar>
                     </div>
                     <Button asChild variant="secondary" size="sm">
-                        <Link href={`/board/${board.id}`}>View Board</Link>
+                        <Link href={`/board/${board.id}?workpanelId=${workpanelId}`}>View Board</Link>
                     </Button>
                 </CardFooter>
                 </Card>
             ))}
-            <CreateBoardDialog workspaceId={workspaceId} onBoardCreated={() => { /* Data will refetch via snapshot listener */ }} />
+            <CreateBoardDialog workpanelId={workpanelId} onBoardCreated={() => { /* Data will refetch via snapshot listener */ }} />
         </div>
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
             <AlertDialogContent>

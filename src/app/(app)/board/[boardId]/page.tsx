@@ -1,14 +1,20 @@
+
+"use client"
 import { DynamicBoard } from "@/components/dynamic-board";
+import { useSearchParams } from 'next/navigation'
 
 type Params = { boardId: string };
 
-export default async function BoardPage({
+export default function BoardPage({
   params,
-}: { params: Promise<Params> }) {
-  const { boardId } = await params; // ✅ must await
+}: { params: Params }) {
+  const { boardId } = params;
+  const searchParams = useSearchParams();
+  const workpanelId = searchParams.get('workpanelId') || 'default-workpanel';
+
   return (
     <div className="h-full flex flex-col">
-      <DynamicBoard boardId={boardId} />
+      <DynamicBoard boardId={boardId} workpanelId={workpanelId} />
     </div>
   );
 }

@@ -27,7 +27,7 @@ import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
 
-function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceId: string, boardId: string, boardMembers: BoardMember[] }) {
+function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelId: string, boardId: string, boardMembers: BoardMember[] }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
@@ -64,7 +64,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
                 return;
             }
 
-            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             await updateDoc(boardRef, {
                 [`members.${userId}`]: 'editor'
             });
@@ -75,7 +75,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workspaceId, boardId, simpleUser, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
+                await logActivity(workpanelId, boardId, simpleUser, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
             }
 
             toast({ title: 'User invited successfully!' });
@@ -92,7 +92,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     const handleRoleChange = async (memberId: string, newRole: 'editor' | 'viewer' | 'owner') => {
         if (newRole === 'owner') return; // Should have a separate "transfer ownership" flow
         try {
-            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             await updateDoc(boardRef, {
                 [`members.${memberId}`]: newRole
             });
@@ -105,7 +105,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     
     const handleRemoveMember = async (memberId: string) => {
         try {
-            const boardRef = doc(db, `workspaces/${workspaceId}/boards`, boardId);
+            const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             const memberToRemove = boardMembers.find(m => m.uid === memberId);
             await updateDoc(boardRef, {
                 [`members.${memberId}`]: deleteField()
@@ -117,7 +117,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                 await logActivity(workspaceId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                 await logActivity(workpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
             }
 
              toast({ title: 'Member removed.' });
@@ -198,7 +198,7 @@ function BoardMembersDialog({ workspaceId, boardId, boardMembers }: { workspaceI
     )
 }
 
-function Board({ boardId }: { boardId: string }) {
+function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<{ name: string } | null>(null);
@@ -213,15 +213,13 @@ function Board({ boardId }: { boardId: string }) {
   const [isActivityDrawerOpen, setIsActivityDrawerOpen] = React.useState(false);
   const { toast } = useToast();
 
-  const workspaceId = 'default-workspace';
-  
   React.useEffect(() => {
-    if (!user || !boardId || !workspaceId) {
+    if (!user || !boardId || !workpanelId) {
         setLoading(true);
         return;
     }
 
-    const boardRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}`);
+    const boardRef = doc(db, `workspaces/${workpanelId}/boards/${boardId}`);
     
     const unsubscribeBoard = onSnapshot(boardRef, async (boardSnap) => {
         if (!boardSnap.exists()) {
@@ -264,8 +262,8 @@ function Board({ boardId }: { boardId: string }) {
              toast({ variant: 'destructive', title: 'Error loading board members' });
         }
 
-        const groupsQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/groups`), orderBy('order'));
-        const tasksQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`));
+        const groupsQuery = query(collection(db, `workspaces/${workpanelId}/boards/${boardId}/groups`), orderBy('order'));
+        const tasksQuery = query(collection(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`));
 
         const unsubscribeGroups = onSnapshot(groupsQuery, (groupsSnapshot) => {
              const groupsData = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; order: number } }));
@@ -313,7 +311,7 @@ function Board({ boardId }: { boardId: string }) {
     return () => {
         unsubscribeBoard();
     };
-}, [user, boardId, workspaceId, toast]);
+}, [user, boardId, workpanelId, toast]);
 
 
   const onDragEnd = async (result: DropResult) => {
@@ -329,7 +327,7 @@ function Board({ boardId }: { boardId: string }) {
         const batch = writeBatch(db);
         orderedColumns.forEach((col, index) => {
             newColumnsState[col.id].order = index;
-            batch.update(doc(db, `workspaces/${workspaceId}/boards/${boardId}/groups`, col.id), { order: index });
+            batch.update(doc(db, `workspaces/${workpanelId}/boards/${boardId}/groups`, col.id), { order: index });
         });
         setColumns(newColumnsState);
         await batch.commit();
@@ -357,7 +355,7 @@ function Board({ boardId }: { boardId: string }) {
       
       const batch = writeBatch(db);
       sourceItems.forEach((item, index) => {
-        const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
+        const taskRef = doc(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`, item.id);
         batch.update(taskRef, { order: index });
       });
       await batch.commit();
@@ -377,21 +375,23 @@ function Board({ boardId }: { boardId: string }) {
             displayName: user.displayName,
             photoURL: user.photoURL,
         };
-      logActivity(workspaceId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
-
+      
       const batch = writeBatch(db);
-      const movedTaskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, removed.id);
+      const movedTaskRef = doc(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`, removed.id);
       batch.update(movedTaskRef, { groupId: destColId, order: destination.index });
       
       sourceItems.forEach((item, index) => {
-        const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
+        const taskRef = doc(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`, item.id);
         batch.update(taskRef, { order: index });
       });
       destItems.forEach((item, index) => {
-         const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, item.id);
+         const taskRef = doc(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`, item.id);
          batch.update(taskRef, { order: index });
       });
+      
       await batch.commit();
+
+      logActivity(workpanelId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
     }
   };
   
@@ -577,9 +577,9 @@ function Board({ boardId }: { boardId: string }) {
                     <History className="mr-2 h-4 w-4" />
                     Activity
                 </Button>
-                <BoardMembersDialog workspaceId={workspaceId} boardId={boardId} boardMembers={boardMembers} />
+                <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} />
                  <CreateGroupDialog 
-                    workspaceId={workspaceId}
+                    workspaceId={workpanelId}
                     boardId={boardId}
                     columnCount={orderedColumns.length}
                 />
@@ -588,7 +588,7 @@ function Board({ boardId }: { boardId: string }) {
         {selectedTask && (
             <TaskDetailsDrawer 
                 task={selectedTask} 
-                workspaceId={workspaceId}
+                workspaceId={workpanelId}
                 boardId={boardId}
                 boardMembers={boardMembers}
                 isOpen={!!selectedTask} 
@@ -597,7 +597,7 @@ function Board({ boardId }: { boardId: string }) {
             />
         )}
         <ActivityDrawer
-            workspaceId={workspaceId}
+            workspaceId={workpanelId}
             boardId={boardId}
             isOpen={isActivityDrawerOpen}
             onOpenChange={setIsActivityDrawerOpen}
@@ -617,7 +617,7 @@ function Board({ boardId }: { boardId: string }) {
                         index={index}
                         boardMembers={boardMembers}
                         onTaskClick={setSelectedTask}
-                        workspaceId={workspaceId}
+                        workspaceId={workpanelId}
                         boardId={boardId}
                     />
                 ))}

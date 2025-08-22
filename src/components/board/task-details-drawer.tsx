@@ -44,7 +44,7 @@ const priorityConfig = {
 };
 
 
-export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task; workspaceId: string; boardId:string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
+export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task; workspaceId: string; boardId:string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
     const { user } = useAuth();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = React.useState(false);
@@ -67,9 +67,9 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
     React.useEffect(() => {
         setEditedTask(task);
         setOriginalTask(task); // Keep track of the original task state
-        if (task && workspaceId && boardId) {
+        if (task && workpanelId && boardId) {
             const commentsQuery = query(
-                collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`),
+                collection(db, `workspaces/${workpanelId}/boards/${boardId}/tasks/${task.id}/comments`),
                 orderBy('createdAt', 'asc')
             );
             const unsubscribe = onSnapshot(commentsQuery, (snapshot) => {
@@ -78,13 +78,13 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
             });
             return () => unsubscribe();
         }
-    }, [task, workspaceId, boardId]);
+    }, [task, workpanelId, boardId]);
 
     const handleFieldUpdate = async (field: keyof Task, value: any, logMessage?: string) => {
         if (!task || !user) return;
         
         try {
-            const taskRef = doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id);
+            const taskRef = doc(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`, task.id);
             await updateDoc(taskRef, { [field]: value });
             if (logMessage) {
                  const simpleUser: SimpleUser = {
@@ -92,7 +92,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workspaceId, boardId, simpleUser, logMessage, task.id);
+                await logActivity(workpanelId, boardId, simpleUser, logMessage, task.id);
             }
         } catch (error) {
             console.error(`Failed to update task ${field}:`, error);
@@ -139,11 +139,11 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                 }
             }
             
-            const commentsQuery = query(collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`));
+            const commentsQuery = query(collection(db, `workspaces/${workpanelId}/boards/${boardId}/tasks/${task.id}/comments`));
             const commentsSnapshot = await getDocs(commentsQuery);
             commentsSnapshot.forEach(doc => batch.delete(doc.ref));
             
-            batch.delete(doc(db, `workspaces/${workspaceId}/boards/${boardId}/tasks`, task.id));
+            batch.delete(doc(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`, task.id));
             
             await batch.commit();
 
@@ -152,7 +152,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                 displayName: user.displayName,
                 photoURL: user.photoURL,
             };
-            await logActivity(workspaceId, boardId, simpleUser, `deleted task "${taskToDelete.content}".`);
+            await logActivity(workpanelId, boardId, simpleUser, `deleted task "${taskToDelete.content}".`);
 
             toast({ title: 'Task deleted successfully' });
             onDelete(task.id);
@@ -238,7 +238,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                 displayName: user.displayName,
                 photoURL: user.photoURL,
             };
-            const commentsCollectionRef = collection(db, `workspaces/${workspaceId}/boards/${boardId}/tasks/${task.id}/comments`);
+            const commentsCollectionRef = collection(db, `workspaces/${workpanelId}/boards/${boardId}/tasks/${task.id}/comments`);
             await addDoc(commentsCollectionRef, {
                 content: newComment,
                 authorId: simpleUser.uid,
@@ -246,7 +246,7 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
                 authorPhotoURL: simpleUser.photoURL || '',
                 createdAt: serverTimestamp(),
             });
-            await logActivity(workspaceId, boardId, simpleUser, `commented on task "${editedTask.content}": "${newComment}"`, task.id);
+            await logActivity(workpanelId, boardId, simpleUser, `commented on task "${editedTask.content}": "${newComment}"`, task.id);
             setNewComment('');
         } catch (error) {
             console.error("Failed to post comment:", error);
@@ -692,7 +692,3 @@ export function TaskDetailsDrawer({ task, workspaceId, boardId, boardMembers, is
         </Sheet>
     );
 }
-
-    
-
-    

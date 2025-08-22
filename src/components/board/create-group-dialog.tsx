@@ -13,7 +13,7 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
-export function CreateGroupDialog({ workspaceId, boardId, columnCount }: { workspaceId: string, boardId: string, columnCount: number }) {
+export function CreateGroupDialog({ workspaceId: workpanelId, boardId, columnCount }: { workspaceId: string, boardId: string, columnCount: number }) {
     const [name, setName] = React.useState('');
     const [isCreating, setIsCreating] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
@@ -28,7 +28,7 @@ export function CreateGroupDialog({ workspaceId, boardId, columnCount }: { works
         }
         setIsCreating(true);
         try {
-            await addDoc(collection(db, `workspaces/${workspaceId}/boards/${boardId}/groups`), {
+            await addDoc(collection(db, `workspaces/${workpanelId}/boards/${boardId}/groups`), {
                 name: name,
                 order: columnCount,
                 createdAt: serverTimestamp(),
@@ -40,7 +40,7 @@ export function CreateGroupDialog({ workspaceId, boardId, columnCount }: { works
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workspaceId, boardId, simpleUser, `created list "${name}"`);
+                await logActivity(workpanelId, boardId, simpleUser, `created list "${name}"`);
             }
 
             toast({ title: "List created successfully!" });
