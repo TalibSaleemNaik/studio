@@ -53,7 +53,8 @@ function CreateWorkpanelDialog({ onClose }: { onClose: () => void }) {
                  ownerId: user.uid,
                  members: {
                      [user.uid]: 'owner'
-                 }
+                 },
+                 isPrivate: false,
             });
 
             toast({ title: 'Workpanel created!', description: `"${name}" is ready.` });

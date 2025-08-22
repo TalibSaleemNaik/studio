@@ -65,6 +65,7 @@ export interface Board {
     description: string;
     ownerId: string;
     members: { [key: string]: BoardRole };
+    isPrivate?: boolean;
 }
 
 export interface Comment {

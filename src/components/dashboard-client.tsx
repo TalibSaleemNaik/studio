@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User } from "lucide-react";
+import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User, Lock } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -21,13 +21,10 @@ import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
 import { UserProfile, Board as BoardType, WorkpanelRole } from "./board/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Checkbox } from "./ui/checkbox";
 
-interface Board {
+interface Board extends BoardType {
   id: string;
-  name: string;
-  description: string;
-  ownerId: string;
-  members: { [key: string]: 'owner' | 'editor' | 'viewer' };
 }
 
 interface Workpanel {
@@ -39,6 +36,7 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
     const [isCreating, setIsCreating] = useState(false);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const [isPrivate, setIsPrivate] = useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
 
@@ -61,7 +59,8 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
                 description: description,
                 createdAt: serverTimestamp(),
                 ownerId: user.uid,
-                members: boardMembers
+                members: boardMembers,
+                isPrivate: isPrivate,
             });
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
@@ -86,6 +85,7 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
             setIsOpen(false);
             setTitle('');
             setDescription('');
+            setIsPrivate(false);
             onBoardCreated();
         } catch (error) {
             console.error("Failed to create board:", error);
@@ -112,7 +112,7 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
                     <DialogHeader>
                         <DialogTitle>Create New Teamboard</DialogTitle>
                         <DialogDescription>
-                            Give your new teamboard a title and description. Three default lists (To Do, In Progress, Done) will be created for you.
+                            Give your new teamboard a title and description.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -128,6 +128,12 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
                             </Label>
                             <Textarea id="description" name="description" placeholder="Describe the board's purpose." className="col-span-3" value={description} onChange={(e) => setDescription(e.target.value)} disabled={isCreating} />
                         </div>
+                        <div className="flex items-center space-x-2 justify-end">
+                            <Checkbox id="private" checked={isPrivate} onCheckedChange={(checked) => setIsPrivate(checked as boolean)} disabled={isCreating}/>
+                            <Label htmlFor="private" className="text-sm font-normal text-muted-foreground">
+                                Make this board private
+                            </Label>
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button type="submit" disabled={isCreating}>
@@ -140,14 +146,17 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
     )
 }
 
-function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDelete }: { board: BoardType, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: BoardType) => void, canDelete: boolean }) {
+function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDelete }: { board: Board, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void, canDelete: boolean }) {
     const owner = boardMembers.find(m => m.uid === board.ownerId);
 
     return (
         <Card className="hover:shadow-md transition-shadow flex flex-col">
             <CardHeader>
                 <div className="flex items-start justify-between">
-                    <CardTitle className="font-headline">{board.name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                         {board.isPrivate && <Lock className="h-4 w-4 text-muted-foreground" />}
+                         <CardTitle className="font-headline">{board.name}</CardTitle>
+                    </div>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -201,7 +210,7 @@ function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDele
 }
 
 export function DashboardClient({ workpanelId }: { workpanelId: string }) {
-    const [boards, setBoards] = useState<BoardType[]>([]);
+    const [boards, setBoards] = useState<Board[]>([]);
     const [workpanel, setWorkpanel] = useState<Workpanel | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -210,7 +219,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const [allUsers, setAllUsers] = useState<Map<string, UserProfile>>(new Map());
 
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-    const [boardToDelete, setBoardToDelete] = useState<BoardType | null>(null);
+    const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
@@ -232,8 +241,12 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
             const unsubscribeBoards = onSnapshot(boardsQuery, async (querySnapshot) => {
                 const boardsData = querySnapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() } as BoardType))
-                    .filter(board => board.members && board.members[user.uid]);
+                    .map(doc => ({ id: doc.id, ...doc.data() } as Board))
+                    .filter(board => {
+                        // Show board if it's not private, OR if it is private and the user is a member.
+                        if (!board.isPrivate) return true;
+                        return board.members && board.members[user.uid];
+                    });
 
                 setBoards(boardsData);
 
@@ -273,7 +286,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         return () => unsubscribeWorkpanel();
     }, [user, workpanelId, allUsers]);
 
-    const openDeleteDialog = (board: BoardType) => {
+    const openDeleteDialog = (board: Board) => {
         setBoardToDelete(board);
         setIsDeleteDialogOpen(true);
     };
