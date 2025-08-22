@@ -52,7 +52,6 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
         setIsCreating(true);
         try {
             const batch = writeBatch(db);
-            const workpanelRef = doc(db, `workspaces/${workpanelId}`);
             const boardRef = doc(collection(db, `workspaces/${workpanelId}/boards`));
             
             const boardMembers = { [user.uid]: 'owner' };
@@ -64,9 +63,6 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
                 ownerId: user.uid,
                 members: boardMembers
             });
-
-            // Note: The logic for inheriting members from workpanel might be needed here
-            // or handled separately. For now, only the creator is a member.
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
@@ -226,20 +222,18 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         const workpanelRef = doc(db, `workspaces/${workpanelId}`);
         const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
             if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
-                // This could mean the workpanel doesn't exist, or the user isn't a member.
-                // For now, we'll show an error. A more robust solution could check for existence first.
                 setError("You do not have permission to view this workpanel.");
                 setLoading(false);
                 return;
             }
 
             setWorkpanel(workspaceSnap.data() as Workpanel);
-
+            
             const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
             const unsubscribeBoards = onSnapshot(boardsQuery, async (querySnapshot) => {
                 const boardsData = querySnapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() } as BoardType))
-                    .filter(board => board.members && board.members[user.uid]); // Client-side filter for membership
+                    .filter(board => board.members && board.members[user.uid]);
 
                 setBoards(boardsData);
 
@@ -388,3 +382,5 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </>
     )
 }
+
+    

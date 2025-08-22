@@ -13,7 +13,7 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
-export function CreateGroupDialog({ workspaceId: workpanelId, boardId, columnCount }: { workspaceId: string, boardId: string, columnCount: number }) {
+export function CreateGroupDialog({ workpanelId, boardId, columnCount }: { workpanelId: string, boardId: string, columnCount: number }) {
     const [name, setName] = React.useState('');
     const [isCreating, setIsCreating] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
@@ -86,3 +86,5 @@ export function CreateGroupDialog({ workspaceId: workpanelId, boardId, columnCou
         </Dialog>
     )
 }
+
+    
