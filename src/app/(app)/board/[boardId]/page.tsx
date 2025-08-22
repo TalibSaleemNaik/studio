@@ -1,16 +1,15 @@
 
-"use client"
 import { DynamicBoard } from "@/components/dynamic-board";
-import { useSearchParams } from 'next/navigation'
 
 type Params = { boardId: string };
+type SearchParams = { workpanelId?: string };
 
 export default function BoardPage({
   params,
-}: { params: Params }) {
+  searchParams
+}: { params: Params, searchParams: SearchParams }) {
   const { boardId } = params;
-  const searchParams = useSearchParams();
-  const workpanelId = searchParams.get('workpanelId') || 'default-workpanel';
+  const workpanelId = searchParams.workpanelId || 'default-workpanel';
 
   return (
     <div className="h-full flex flex-col">
