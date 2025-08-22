@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
@@ -24,6 +24,7 @@ interface Board {
   id: string;
   name: string;
   description: string;
+  members: { [key: string]: 'owner' | 'editor' | 'viewer' };
 }
 
 function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: string, onBoardCreated: () => void }) {
@@ -179,15 +180,22 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const setupListener = async () => {
         setLoading(true);
         try {
-            await ensureWorkspaceExists(user.uid);
+            const workspaceRef = doc(db, `workspaces/${workpanelId}`);
+            const workspaceSnap = await getDoc(workspaceRef);
 
+            if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
+                 await ensureWorkspaceExists(user.uid);
+            }
+            
             const boardsQuery = query(
-                collection(db, `workspaces/${workpanelId}/boards`),
-                where(`members.${user.uid}`, 'in', ['owner', 'editor', 'viewer'])
+                collection(db, `workspaces/${workpanelId}/boards`)
             );
             
             unsubscribe = onSnapshot(boardsQuery, (querySnapshot) => {
-                const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+                const boardsData = querySnapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() } as Board))
+                    .filter(board => board.members && board.members[user.uid]); // Filter client-side
+
                 setBoards(boardsData);
                 setError(null);
                 setLoading(false);
@@ -328,3 +336,5 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     </>
   )
 }
+
+    
