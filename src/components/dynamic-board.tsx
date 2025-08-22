@@ -4,7 +4,7 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
-import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus } from 'lucide-react';
+import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus, LayoutGrid, List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
@@ -19,13 +19,15 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Checkbox } from './ui/checkbox';
-import { Task, Columns, BoardMember } from './board/types';
+import { Task, Columns, BoardMember, Board as BoardType } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { TableView } from './board/table-view';
 
 function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelId: string, boardId: string, boardMembers: BoardMember[] }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
@@ -201,7 +203,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
 function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
-  const [board, setBoard] = React.useState<{ name: string } | null>(null);
+  const [board, setBoard] = React.useState<BoardType | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
@@ -211,6 +213,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   const [selectedPriorities, setSelectedPriorities] = React.useState<string[]>([]);
   const [dueDateFilter, setDueDateFilter] = React.useState('any');
   const [isActivityDrawerOpen, setIsActivityDrawerOpen] = React.useState(false);
+  const [activeView, setActiveView] = React.useState('kanban');
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -237,7 +240,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
             return;
         }
         
-        setBoard({ name: boardData.name });
+        setBoard({ id: boardSnap.id, ...boardData } as BoardType);
         setError(null);
 
         try {
@@ -318,18 +321,23 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     const { source, destination, type } = result;
     if (!destination || !columns || !user) return;
 
+    const newColumnsState = { ...columns };
+
     if (type === 'COLUMN') {
-        const orderedColumns = Object.values(columns).sort((a,b) => a.order - b.order);
+        const orderedColumns = Object.values(newColumnsState).sort((a,b) => a.order - b.order);
         const [movedColumn] = orderedColumns.splice(source.index, 1);
         orderedColumns.splice(destination.index, 0, movedColumn);
 
-        const newColumnsState = { ...columns };
-        const batch = writeBatch(db);
         orderedColumns.forEach((col, index) => {
             newColumnsState[col.id].order = index;
-            batch.update(doc(db, `workspaces/${workpanelId}/boards/${boardId}/groups`, col.id), { order: index });
         });
+        
         setColumns(newColumnsState);
+        
+        const batch = writeBatch(db);
+        orderedColumns.forEach((col) => {
+            batch.update(doc(db, `workspaces/${workpanelId}/boards/${boardId}/groups`, col.id), { order: col.order });
+        });
         await batch.commit();
         return;
     }
@@ -337,21 +345,20 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     const sourceColId = source.droppableId;
     const destColId = destination.droppableId;
 
-    const startColumn = columns[sourceColId];
-    const endColumn = columns[destColId];
+    const startColumn = newColumnsState[sourceColId];
+    const endColumn = newColumnsState[destColId];
     
     if (!startColumn || !endColumn) return;
     
     const sourceItems = [...startColumn.items];
     const [removed] = sourceItems.splice(source.index, 1);
 
-    const newColumns = { ...columns };
-
     if (sourceColId === destColId) {
       sourceItems.splice(destination.index, 0, removed);
-      newColumns[sourceColId] = { ...startColumn, items: sourceItems };
+      const newColumn = { ...startColumn, items: sourceItems };
+      newColumnsState[sourceColId] = newColumn;
       
-      setColumns(newColumns);
+      setColumns(newColumnsState);
       
       const batch = writeBatch(db);
       sourceItems.forEach((item, index) => {
@@ -364,17 +371,19 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
       const destItems = [...endColumn.items];
       destItems.splice(destination.index, 0, removed);
       
-      newColumns[sourceColId] = { ...startColumn, items: sourceItems };
-      newColumns[destColId] = { ...endColumn, items: destItems };
+      newColumnsState[sourceColId] = { ...startColumn, items: sourceItems };
+      newColumnsState[destColId] = { ...endColumn, items: destItems };
       
-      setColumns(newColumns);
+      setColumns(newColumnsState);
       
       const task = columns[source.droppableId].items[source.index];
+      
       const simpleUser: SimpleUser = {
             uid: user.uid,
             displayName: user.displayName,
             photoURL: user.photoURL,
         };
+      logActivity(workpanelId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
       
       const batch = writeBatch(db);
       const movedTaskRef = doc(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`, removed.id);
@@ -390,8 +399,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
       });
       
       await batch.commit();
-
-      logActivity(workpanelId, boardId, simpleUser, `moved task "${task.content}" from "${startColumn.name}" to "${endColumn.name}".`, task.id);
     }
   };
   
@@ -418,36 +425,40 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
 
   const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
+  const allTasks = React.useMemo(() => Object.values(columns).flatMap(c => c.items), [columns]);
+
+  const filteredTasks = React.useMemo(() => allTasks.filter(item => {
+    const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const assigneeMatch = selectedAssignees.length === 0 || 
+        item.assignees?.some(assignee => selectedAssignees.includes(assignee));
+
+    const priorityMatch = selectedPriorities.length === 0 ||
+        (item.priority && selectedPriorities.includes(item.priority));
+
+    const dueDateMatch = () => {
+        if (dueDateFilter === 'any' || !item.dueDate) return true;
+        const today = startOfToday();
+        const taskDueDate = asJsDate(item.dueDate);
+        if (dueDateFilter === 'overdue') {
+            return isBefore(taskDueDate, today);
+        }
+        if (dueDateFilter === 'due-soon') {
+            const threeDaysFromNow = addDays(today, 3);
+            return isAfter(taskDueDate, today) && isBefore(taskDueDate, threeDaysFromNow);
+        }
+        return true;
+    };
+    
+    return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
+  }), [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
+  
   const filteredColumns = Object.fromEntries(
     Object.entries(columns).map(([columnId, column]) => [
         columnId,
         {
             ...column,
-            items: column.items.filter(item => {
-                const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
-                
-                const assigneeMatch = selectedAssignees.length === 0 || 
-                    item.assignees?.some(assignee => selectedAssignees.includes(assignee));
-
-                const priorityMatch = selectedPriorities.length === 0 ||
-                    (item.priority && selectedPriorities.includes(item.priority));
-
-                const dueDateMatch = () => {
-                    if (dueDateFilter === 'any' || !item.dueDate) return true;
-                    const today = startOfToday();
-                    const taskDueDate = asJsDate(item.dueDate);
-                    if (dueDateFilter === 'overdue') {
-                        return isBefore(taskDueDate, today);
-                    }
-                    if (dueDateFilter === 'due-soon') {
-                        const threeDaysFromNow = addDays(today, 3);
-                        return isAfter(taskDueDate, today) && isBefore(taskDueDate, threeDaysFromNow);
-                    }
-                    return true;
-                };
-                
-                return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
-            })
+            items: column.items.filter(item => filteredTasks.some(t => t.id === item.id))
         }
     ])
   );
@@ -481,8 +492,14 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
 
   return (
       <>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
              <div className="flex items-center gap-2 flex-wrap">
+                 <Tabs value={activeView} onValueChange={setActiveView}>
+                    <TabsList>
+                        <TabsTrigger value="kanban"><LayoutGrid className="mr-2 h-4 w-4" />Kanban</TabsTrigger>
+                        <TabsTrigger value="table"><List className="mr-2 h-4 w-4" />Table</TabsTrigger>
+                    </TabsList>
+                </Tabs>
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -578,11 +595,13 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
                     Activity
                 </Button>
                 <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} />
-                 <CreateGroupDialog 
-                    workspaceId={workpanelId}
-                    boardId={boardId}
-                    columnCount={orderedColumns.length}
-                />
+                 {activeView === 'kanban' && (
+                    <CreateGroupDialog 
+                        workspaceId={workpanelId}
+                        boardId={boardId}
+                        columnCount={orderedColumns.length}
+                    />
+                )}
             </div>
         </div>
         {selectedTask && (
@@ -602,30 +621,38 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
             isOpen={isActivityDrawerOpen}
             onOpenChange={setIsActivityDrawerOpen}
         />
-        <DragDropContext onDragEnd={onDragEnd}>
-            <Droppable droppableId="board" type="COLUMN" direction="horizontal">
-            {(provided) => (
-                <div 
-                    ref={provided.innerRef} 
-                    {...provided.droppableProps}
-                    className="flex-1 flex items-start gap-5 overflow-x-auto pb-4 -mx-8 px-8"
-                >
-                {orderedColumns.map((column, index) => (
-                    <BoardColumn
-                        key={column.id}
-                        column={column}
-                        index={index}
-                        boardMembers={boardMembers}
-                        onTaskClick={setSelectedTask}
-                        workspaceId={workpanelId}
-                        boardId={boardId}
-                    />
-                ))}
-                {provided.placeholder}
-                </div>
-            )}
-            </Droppable>
-        </DragDropContext>
+        {activeView === 'kanban' ? (
+            <DragDropContext onDragEnd={onDragEnd}>
+                <Droppable droppableId="board" type="COLUMN" direction="horizontal">
+                {(provided) => (
+                    <div 
+                        ref={provided.innerRef} 
+                        {...provided.droppableProps}
+                        className="flex-1 flex items-start gap-5 overflow-x-auto pb-4 -mx-8 px-8"
+                    >
+                    {orderedColumns.map((column, index) => (
+                        <BoardColumn
+                            key={column.id}
+                            column={column}
+                            index={index}
+                            boardMembers={boardMembers}
+                            onTaskClick={setSelectedTask}
+                            workspaceId={workpanelId}
+                            boardId={boardId}
+                        />
+                    ))}
+                    {provided.placeholder}
+                    </div>
+                )}
+                </Droppable>
+            </DragDropContext>
+        ) : (
+            <TableView 
+                tasks={filteredTasks}
+                boardMembers={boardMembers}
+                onTaskClick={setSelectedTask}
+            />
+        )}
     </>
   )
 }
