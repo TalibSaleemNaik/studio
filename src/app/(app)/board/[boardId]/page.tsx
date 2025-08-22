@@ -1,15 +1,15 @@
 
 import { DynamicBoard } from "@/components/dynamic-board";
 
-type Params = { boardId: string };
-type SearchParams = { workpanelId?: string };
+type PageProps = { 
+  params: { boardId: string };
+  searchParams: { workpanelId?: string };
+};
 
 export default function BoardPage({
-  params,
-  searchParams
-}: { params: Params, searchParams: SearchParams }) {
-  const { boardId } = params;
-  const workpanelId = searchParams.workpanelId || 'default-workpanel';
+  params: { boardId },
+  searchParams: { workpanelId = 'default-workpanel' }
+}: PageProps) {
 
   return (
     <div className="h-full flex flex-col">
