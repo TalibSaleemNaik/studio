@@ -281,16 +281,19 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
             return;
         }
 
-        const boardData = boardSnap.data();
+        const boardData = boardSnap.data() as BoardType;
         const memberUIDs = Object.keys(boardData.members || {});
         
-        if (!memberUIDs.includes(user.uid)) {
+        // A user has permission if the board is NOT private, OR if it IS private and they are a member.
+        const hasPermission = !boardData.isPrivate || memberUIDs.includes(user.uid);
+
+        if (!hasPermission) {
             setError("You do not have permission to view this board.");
             setLoading(false);
             return;
         }
         
-        setBoard({ id: boardSnap.id, ...boardData } as BoardType);
+        setBoard({ id: boardSnap.id, ...boardData });
         setError(null);
 
         try {
@@ -571,7 +574,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                                             key={p}
                                             value={p}
                                             onSelect={() => handlePrioritySelect(p)}
-                                            className="cursor-pointer capitalize"
+                                            className="cursor-pointer"
                                         >
                                             <Checkbox className="mr-2" checked={selectedPriorities.includes(p)} />
                                             <span>{p}</span>
