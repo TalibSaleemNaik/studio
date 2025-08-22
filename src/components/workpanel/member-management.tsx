@@ -239,7 +239,7 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
                                 <div className="flex items-center gap-2">
                                      <Select 
                                         value={member.role}
-                                        onValueChange={(value) => handleRoleChange(member.uid, value as WorkpanelRole)}
+                                        onValuechange={(value) => handleRoleChange(member.uid, value as WorkpanelRole)}
                                         disabled={user?.uid === member.uid}
                                      >
                                         <SelectTrigger className="w-[120px]">
