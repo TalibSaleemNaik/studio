@@ -7,11 +7,6 @@ import { cn } from '@/lib/utils';
 import { LayoutDashboard, Settings, FolderKanban, ChevronsRightLeft } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
-const topLevelLinks = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/settings', label: 'Settings', icon: Settings },
-];
-
 const workpanels = [
     { id: 'default-workpanel', name: 'Primary Workpanel' },
     { id: 'side-projects', name: 'Side Projects' },
@@ -19,16 +14,26 @@ const workpanels = [
 
 export function MainNav() {
   const pathname = usePathname();
+  const pathSegments = pathname.split('/').filter(Boolean);
+  
+  const isWorkpanelRoute = pathSegments[0] === 'workpanels' && pathSegments[1];
+  const currentWorkpanelId = isWorkpanelRoute ? pathSegments[1] : workpanels[0].id;
+
+  const topLevelLinks = [
+    { href: `/workpanels/${currentWorkpanelId}`, label: 'Dashboard', icon: LayoutDashboard },
+    { href: `/workpanels/${currentWorkpanelId}/settings`, label: 'Settings', icon: Settings },
+  ];
+
 
   return (
     <nav className="flex flex-col h-full p-2">
         {topLevelLinks.map((link) => (
           <Link
-            key={link.href}
+            key={link.label}
             href={link.href}
             className={cn(
               'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              pathname.startsWith(link.href)
+              (pathname === link.href || (link.label === 'Dashboard' && pathname.startsWith('/workpanels') && !pathname.includes('settings')))
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-muted/50'
             )}
