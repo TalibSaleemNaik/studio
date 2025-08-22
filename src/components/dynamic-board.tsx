@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -28,6 +28,7 @@ import { ActivityDrawer } from './board/activity-drawer';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TableView } from './board/table-view';
+import { useSearchParams } from 'next/navigation';
 
 function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelId: string, boardId: string, boardMembers: BoardMember[] }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
@@ -200,7 +201,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
     )
 }
 
-function Board({ boardId, workpanelId = 'default-workpanel' }: { boardId: string, workpanelId?: string }) {
+function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<BoardType | null>(null);
@@ -215,6 +216,51 @@ function Board({ boardId, workpanelId = 'default-workpanel' }: { boardId: string
   const [isActivityDrawerOpen, setIsActivityDrawerOpen] = React.useState(false);
   const [activeView, setActiveView] = React.useState('kanban');
   const { toast } = useToast();
+
+  const allTasks = React.useMemo(() => columns ? Object.values(columns).flatMap(c => c.items) : [], [columns]);
+
+  const filteredTasks = React.useMemo(() => {
+    const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
+    
+    return allTasks.filter(item => {
+        const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const assigneeMatch = selectedAssignees.length === 0 || 
+            item.assignees?.some(assignee => selectedAssignees.includes(assignee));
+
+        const priorityMatch = selectedPriorities.length === 0 ||
+            (item.priority && selectedPriorities.includes(item.priority));
+
+        const dueDateMatch = () => {
+            if (dueDateFilter === 'any' || !item.dueDate) return true;
+            const today = startOfToday();
+            const taskDueDate = asJsDate(item.dueDate);
+            if (dueDateFilter === 'overdue') {
+                return isBefore(taskDueDate, today);
+            }
+            if (dueDateFilter === 'due-soon') {
+                const threeDaysFromNow = addDays(today, 3);
+                return isAfter(taskDueDate, today) && isBefore(taskDueDate, threeDaysFromNow);
+            }
+            return true;
+        };
+        
+        return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
+    });
+  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
+
+  const filteredColumns = React.useMemo(() => {
+      if (!columns) return {};
+      return Object.fromEntries(
+        Object.entries(columns).map(([columnId, column]) => [
+            columnId,
+            {
+                ...column,
+                items: column.items.filter(item => filteredTasks.some(t => t.id === item.id))
+            }
+        ])
+      );
+  }, [columns, filteredTasks]);
 
   React.useEffect(() => {
     if (!user || !boardId || !workpanelId) {
@@ -315,51 +361,6 @@ function Board({ boardId, workpanelId = 'default-workpanel' }: { boardId: string
         unsubscribeBoard();
     };
 }, [user, boardId, workpanelId, toast]);
-
-  const allTasks = React.useMemo(() => columns ? Object.values(columns).flatMap(c => c.items) : [], [columns]);
-
-  const filteredTasks = React.useMemo(() => {
-    const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
-    
-    return allTasks.filter(item => {
-        const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
-        
-        const assigneeMatch = selectedAssignees.length === 0 || 
-            item.assignees?.some(assignee => selectedAssignees.includes(assignee));
-
-        const priorityMatch = selectedPriorities.length === 0 ||
-            (item.priority && selectedPriorities.includes(item.priority));
-
-        const dueDateMatch = () => {
-            if (dueDateFilter === 'any' || !item.dueDate) return true;
-            const today = startOfToday();
-            const taskDueDate = asJsDate(item.dueDate);
-            if (dueDateFilter === 'overdue') {
-                return isBefore(taskDueDate, today);
-            }
-            if (dueDateFilter === 'due-soon') {
-                const threeDaysFromNow = addDays(today, 3);
-                return isAfter(taskDueDate, today) && isBefore(taskDueDate, threeDaysFromNow);
-            }
-            return true;
-        };
-        
-        return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
-    });
-  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
-
-  const filteredColumns = React.useMemo(() => {
-      if (!columns) return {};
-      return Object.fromEntries(
-        Object.entries(columns).map(([columnId, column]) => [
-            columnId,
-            {
-                ...column,
-                items: column.items.filter(item => filteredTasks.some(t => t.id === item.id))
-            }
-        ])
-      );
-  }, [columns, filteredTasks]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, type } = result;
@@ -620,7 +621,7 @@ function Board({ boardId, workpanelId = 'default-workpanel' }: { boardId: string
             />
         )}
         <ActivityDrawer
-            workspaceId={workpanelId}
+            workpanelId={workpanelId}
             boardId={boardId}
             isOpen={isActivityDrawerOpen}
             onOpenChange={setIsActivityDrawerOpen}
@@ -641,7 +642,7 @@ function Board({ boardId, workpanelId = 'default-workpanel' }: { boardId: string
                             index={index}
                             boardMembers={boardMembers}
                             onTaskClick={setSelectedTask}
-                            workspaceId={workpanelId}
+                            workpanelId={workpanelId}
                             boardId={boardId}
                         />
                     ))}
@@ -700,3 +701,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
