@@ -2,7 +2,7 @@
 "use client"
 import { DashboardClient } from "@/components/dashboard-client";
 
-export default function WorkpanelDashboardPage({ params: { workpanelId } }: { params: { workpanelId: string }}) {
+export default function WorkpanelDashboardPage({ params }: { params: { workpanelId: string }}) {
     
     return (
         <div className="space-y-8">
@@ -14,7 +14,7 @@ export default function WorkpanelDashboardPage({ params: { workpanelId } }: { pa
             </div>
             <div>
                 <DashboardClient 
-                    workpanelId={workpanelId}
+                    workpanelId={params.workpanelId}
                 />
             </div>
         </div>
