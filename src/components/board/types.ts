@@ -47,8 +47,16 @@ export interface UserProfile {
     email: string;
 }
 
+export type WorkpanelRole = 'admin' | 'manager' | 'member';
+export type BoardRole = 'owner' | 'editor' | 'viewer';
+
+export interface WorkpanelMember {
+    uid: string;
+    role: WorkpanelRole;
+}
+
 export interface BoardMember extends UserProfile {
-  role: 'owner' | 'editor' | 'viewer';
+  role: BoardRole;
 }
 
 export interface Comment {

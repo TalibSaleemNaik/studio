@@ -4,8 +4,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -19,11 +19,14 @@ import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, wr
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
+import { UserProfile, BoardMember } from "./board/types";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 interface Board {
   id: string;
   name: string;
   description: string;
+  ownerId: string;
   members: { [key: string]: 'owner' | 'editor' | 'viewer' };
 }
 
@@ -50,22 +53,17 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
             
             const boardMembers = { [user.uid]: 'owner' };
 
-            // Set board data
             batch.set(boardRef, {
                 name: title,
                 description: description,
                 createdAt: serverTimestamp(),
                 ownerId: user.uid,
-                members: boardMembers // <-- Add members to the board
+                members: boardMembers
             });
 
-            // Ensure user is a member of the workpanel itself
             batch.set(workpanelRef, {
-                members: {
-                    [user.uid]: 'owner'
-                }
+                members: { [user.uid]: 'owner' }
             }, { merge: true });
-
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
@@ -143,198 +141,253 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
     )
 }
 
-export function DashboardClient({ workpanelId }: { workpanelId: string }) {
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
-  const { toast } = useToast();
-  
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog }: { board: Board, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void }) {
+    const owner = boardMembers.find(m => m.uid === board.ownerId);
 
-  const ensureWorkspaceExists = useCallback(async (uid: string) => {
-    if (!uid || !workpanelId) return;
-    try {
-        const workspaceRef = doc(db, `workspaces/${workpanelId}`);
-        await setDoc(workspaceRef, { 
-            name: "Default Workspace", 
-            ownerId: uid,
-            members: { [uid]: 'owner' }
-        }, { merge: true });
-    } catch(e) {
-        console.error("Error ensuring workpanel exists:", e);
-        setError("Failed to initialize your workpanel. Please try again.");
-    }
-  }, [workpanelId]);
-
-  useEffect(() => {
-    if (!user) {
-        setLoading(true);
-        return;
-    }
-
-    let unsubscribe: () => void = () => {};
-
-    const setupListener = async () => {
-        setLoading(true);
-        try {
-            const workspaceRef = doc(db, `workspaces/${workpanelId}`);
-            const workspaceSnap = await getDoc(workspaceRef);
-
-            if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
-                 await ensureWorkspaceExists(user.uid);
-            }
-            
-            const boardsQuery = query(
-                collection(db, `workspaces/${workpanelId}/boards`)
-            );
-            
-            unsubscribe = onSnapshot(boardsQuery, (querySnapshot) => {
-                const boardsData = querySnapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() } as Board))
-                    .filter(board => board.members && board.members[user.uid]); // Filter client-side
-
-                setBoards(boardsData);
-                setError(null);
-                setLoading(false);
-            }, (err) => {
-                console.error("Error fetching boards:", err);
-                setError("Failed to load boards. Please check your permissions and try again.");
-                setLoading(false);
-            });
-        } catch (e) {
-             setError("An unexpected error occurred during setup.");
-             setLoading(false);
-        }
-    };
-    
-    setupListener();
-
-    return () => unsubscribe();
-  }, [user, workpanelId, ensureWorkspaceExists]);
-
-  const openDeleteDialog = (board: Board) => {
-    setBoardToDelete(board);
-    setIsDeleteDialogOpen(true);
-  };
-  
-  const handleDeleteBoard = async () => {
-    if (!boardToDelete || !user) return;
-    setIsDeleting(true);
-
-    try {
-      const batch = writeBatch(db);
-      
-      const tasksRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/tasks`);
-      const tasksSnap = await getDocs(tasksRef);
-      tasksSnap.docs.forEach(doc => batch.delete(doc.ref));
-
-      const groupsRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/groups`);
-      const groupsSnap = await getDocs(groupsRef);
-      groupsSnap.docs.forEach(doc => batch.delete(doc.ref));
-
-      const activityRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/activity`);
-      const activitySnap = await getDocs(activityRef);
-      activitySnap.docs.forEach(doc => batch.delete(doc.ref));
-
-      const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardToDelete.id);
-      batch.delete(boardRef);
-
-      await batch.commit();
-
-      toast({ title: "Board deleted", description: `The board "${boardToDelete.name}" and all its contents have been deleted.` });
-    } catch (error) {
-      console.error("Error deleting board: ", error);
-      toast({ variant: 'destructive', title: 'Error deleting board', description: 'Could not delete the board. Please try again.' });
-    } finally {
-      setIsDeleting(false);
-      setIsDeleteDialogOpen(false);
-      setBoardToDelete(null);
-    }
-  };
-
-
-  if (loading) {
-      return (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
-          </div>
-      )
-  }
-
-  if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-destructive/10 rounded-lg">
-            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-            <p className="text-destructive font-semibold">Could not load dashboard data</p>
-            <p className="text-muted-foreground">{error}</p>
-        </div>
-      )
-  }
-
-  return (
-      <>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {boards.map((board) => (
-                <Card key={board.id} className="hover:shadow-md transition-shadow flex flex-col">
-                <CardHeader>
-                    <div className="flex items-start justify-between">
+    return (
+        <Card className="hover:shadow-md transition-shadow flex flex-col">
+            <CardHeader>
+                <div className="flex items-start justify-between">
                     <CardTitle className="font-headline">{board.name}</CardTitle>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                                <MoreVertical className="h-4 w-4" />
+                            </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Archive</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => openDeleteDialog(board)} className="text-destructive">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                        </DropdownMenuItem>
+                            <DropdownMenuItem>Edit</DropdownMenuItem>
+                            <DropdownMenuItem>Archive</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => openDeleteDialog(board)} className="text-destructive">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                </div>
+                <CardDescription className="line-clamp-2 h-10">{board.description || 'No description'}</CardDescription>
+            </CardHeader>
+            <CardFooter className="flex justify-between items-center mt-auto">
+                <TooltipProvider>
+                    <div className="flex items-center gap-2">
+                        <div className="flex -space-x-2 overflow-hidden">
+                            {boardMembers.slice(0, 3).map(member => (
+                                <Tooltip key={member.uid}>
+                                    <TooltipTrigger asChild>
+                                        <Avatar className="h-8 w-8 border-2 border-background">
+                                            <AvatarImage src={member.photoURL} />
+                                            <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{member.displayName}</TooltipContent>
+                                </Tooltip>
+                            ))}
+                        </div>
+                        {owner && (
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                <span>{owner.displayName}</span>
+                            </div>
+                        )}
                     </div>
-                    <CardDescription className="line-clamp-2">{board.description || 'No description'}</CardDescription>
-                </CardHeader>
-                <CardFooter className="flex justify-between items-center mt-auto">
-                    <div className="flex -space-x-2 overflow-hidden">
-                        <Avatar className="h-8 w-8 border-2 border-background">
-                            <AvatarFallback>+?</AvatarFallback>
-                        </Avatar>
-                    </div>
-                    <Button asChild variant="secondary" size="sm">
-                        <Link href={`/board/${board.id}?workpanelId=${workpanelId}`}>View Board</Link>
-                    </Button>
-                </CardFooter>
-                </Card>
-            ))}
-            <CreateBoardDialog workpanelId={workpanelId} onBoardCreated={() => { /* Data will refetch via snapshot listener */ }} />
-        </div>
-        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete the board
-                        <span className="font-semibold"> {boardToDelete?.name} </span> 
-                        and all of its tasks and lists.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteBoard} disabled={isDeleting}>
-                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Continue
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-    </>
-  )
+                </TooltipProvider>
+                <Button asChild variant="secondary" size="sm">
+                    <Link href={`/board/${board.id}?workpanelId=${workpanelId}`}>View Board</Link>
+                </Button>
+            </CardFooter>
+        </Card>
+    )
 }
 
-    
+export function DashboardClient({ workpanelId }: { workpanelId: string }) {
+    const [boards, setBoards] = useState<Board[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const [allUsers, setAllUsers] = useState<Map<string, UserProfile>>(new Map());
+
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const ensureWorkspaceExists = useCallback(async (uid: string) => {
+        if (!uid || !workpanelId) return;
+        try {
+            const workspaceRef = doc(db, `workspaces/${workpanelId}`);
+            await setDoc(workspaceRef, {
+                name: "Default Workspace",
+                ownerId: uid,
+                members: { [uid]: 'owner' }
+            }, { merge: true });
+        } catch (e) {
+            console.error("Error ensuring workpanel exists:", e);
+            setError("Failed to initialize your workpanel. Please try again.");
+        }
+    }, [workpanelId]);
+
+    useEffect(() => {
+        if (!user) {
+            setLoading(true);
+            return;
+        }
+
+        let unsubscribe: () => void = () => { };
+
+        const setupListener = async () => {
+            setLoading(true);
+            try {
+                const workspaceRef = doc(db, `workspaces/${workpanelId}`);
+                const workspaceSnap = await getDoc(workspaceRef);
+
+                if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
+                    await ensureWorkspaceExists(user.uid);
+                }
+
+                const boardsQuery = query(
+                    collection(db, `workspaces/${workpanelId}/boards`),
+                    where(`members.${user.uid}`, 'in', ['owner', 'editor', 'viewer'])
+                );
+
+                unsubscribe = onSnapshot(boardsQuery, async (querySnapshot) => {
+                    const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+                    setBoards(boardsData);
+
+                    // Fetch user profiles for all members of all boards
+                    const memberIds = new Set<string>();
+                    boardsData.forEach(board => {
+                        Object.keys(board.members).forEach(uid => memberIds.add(uid));
+                    });
+
+                    const newUsers = new Map(allUsers);
+                    const usersToFetch = Array.from(memberIds).filter(uid => !newUsers.has(uid));
+                    
+                    if (usersToFetch.length > 0) {
+                        const userDocs = await Promise.all(usersToFetch.map(uid => getDoc(doc(db, 'users', uid))));
+                        userDocs.forEach(userDoc => {
+                            if (userDoc.exists()) {
+                                newUsers.set(userDoc.id, userDoc.data() as UserProfile);
+                            }
+                        });
+                        setAllUsers(newUsers);
+                    }
+
+                    setError(null);
+                    setLoading(false);
+                }, (err) => {
+                    console.error("Error fetching boards:", err);
+                    setError("Failed to load boards. Please check your permissions and try again.");
+                    setLoading(false);
+                });
+            } catch (e) {
+                setError("An unexpected error occurred during setup.");
+                setLoading(false);
+            }
+        };
+
+        setupListener();
+
+        return () => unsubscribe();
+    }, [user, workpanelId, ensureWorkspaceExists, allUsers]);
+
+    const openDeleteDialog = (board: Board) => {
+        setBoardToDelete(board);
+        setIsDeleteDialogOpen(true);
+    };
+
+    const handleDeleteBoard = async () => {
+        if (!boardToDelete || !user) return;
+        setIsDeleting(true);
+
+        try {
+            const batch = writeBatch(db);
+
+            const tasksRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/tasks`);
+            const tasksSnap = await getDocs(tasksRef);
+            tasksSnap.docs.forEach(doc => batch.delete(doc.ref));
+
+            const groupsRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/groups`);
+            const groupsSnap = await getDocs(groupsRef);
+            groupsSnap.docs.forEach(doc => batch.delete(doc.ref));
+
+            const activityRef = collection(db, `workspaces/${workpanelId}/boards/${boardToDelete.id}/activity`);
+            const activitySnap = await getDocs(activityRef);
+            activitySnap.docs.forEach(doc => batch.delete(doc.ref));
+
+            const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardToDelete.id);
+            batch.delete(boardRef);
+
+            await batch.commit();
+
+            toast({ title: "Board deleted", description: `The board "${boardToDelete.name}" and all its contents have been deleted.` });
+        } catch (error) {
+            console.error("Error deleting board: ", error);
+            toast({ variant: 'destructive', title: 'Error deleting board', description: 'Could not delete the board. Please try again.' });
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteDialogOpen(false);
+            setBoardToDelete(null);
+        }
+    };
+
+
+    if (loading) {
+        return (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-destructive/10 rounded-lg">
+                <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+                <p className="text-destructive font-semibold">Could not load dashboard data</p>
+                <p className="text-muted-foreground">{error}</p>
+            </div>
+        )
+    }
+
+    return (
+        <>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {boards.map((board) => {
+                    const boardMembers = Object.keys(board.members)
+                        .map(uid => allUsers.get(uid))
+                        .filter((u): u is UserProfile => !!u);
+
+                    return (
+                        <BoardCard
+                            key={board.id}
+                            board={board}
+                            workpanelId={workpanelId}
+                            boardMembers={boardMembers}
+                            openDeleteDialog={openDeleteDialog}
+                        />
+                    );
+                })}
+                <CreateBoardDialog workpanelId={workpanelId} onBoardCreated={() => { /* Data will refetch via snapshot listener */ }} />
+            </div>
+            <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the board
+                            <span className="font-semibold"> {boardToDelete?.name} </span>
+                            and all of its tasks and lists.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteBoard} disabled={isDeleting}>
+                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Continue
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+    )
+}
