@@ -200,7 +200,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
     )
 }
 
-function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string }) {
+function Board({ boardId, workpanelId = 'default-workpanel' }: { boardId: string, workpanelId?: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<BoardType | null>(null);
