@@ -19,7 +19,7 @@ import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, wr
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
-import { UserProfile, BoardMember } from "./board/types";
+import { UserProfile, BoardMember, WorkpanelRole } from "./board/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 interface Board {
@@ -28,6 +28,10 @@ interface Board {
   description: string;
   ownerId: string;
   members: { [key: string]: 'owner' | 'editor' | 'viewer' };
+}
+
+interface Workpanel {
+    members: { [key: string]: WorkpanelRole };
 }
 
 function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: string, onBoardCreated: () => void }) {
@@ -141,7 +145,7 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
     )
 }
 
-function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog }: { board: Board, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void }) {
+function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDelete }: { board: Board, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void, canDelete: boolean }) {
     const owner = boardMembers.find(m => m.uid === board.ownerId);
 
     return (
@@ -158,10 +162,12 @@ function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog }: { boa
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem>Edit</DropdownMenuItem>
                             <DropdownMenuItem>Archive</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => openDeleteDialog(board)} className="text-destructive">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                            </DropdownMenuItem>
+                            {canDelete && (
+                                <DropdownMenuItem onSelect={() => openDeleteDialog(board)} className="text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                </DropdownMenuItem>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -201,6 +207,7 @@ function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog }: { boa
 
 export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const [boards, setBoards] = useState<Board[]>([]);
+    const [workpanel, setWorkpanel] = useState<Workpanel | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { user } = useAuth();
@@ -218,7 +225,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             await setDoc(workspaceRef, {
                 name: "Default Workspace",
                 ownerId: uid,
-                members: { [uid]: 'owner' }
+                members: { [uid]: 'admin' } // The creator is an admin by default
             }, { merge: true });
         } catch (e) {
             console.error("Error ensuring workpanel exists:", e);
@@ -232,62 +239,58 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             return;
         }
 
-        let unsubscribe: () => void = () => { };
+        const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+        const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
+            if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
+                await ensureWorkspaceExists(user.uid);
+                // After ensuring it exists, the listener will be re-triggered.
+                return;
+            }
 
-        const setupListener = async () => {
-            setLoading(true);
-            try {
-                const workspaceRef = doc(db, `workspaces/${workpanelId}`);
-                const workspaceSnap = await getDoc(workspaceRef);
+            setWorkpanel(workspaceSnap.data() as Workpanel);
 
-                if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
-                    await ensureWorkspaceExists(user.uid);
+            const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
+            const unsubscribeBoards = onSnapshot(boardsQuery, async (querySnapshot) => {
+                const boardsData = querySnapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() } as Board))
+                    .filter(board => board.members && board.members[user.uid]); // Client-side filter
+
+                setBoards(boardsData);
+
+                const memberIds = new Set<string>();
+                boardsData.forEach(board => {
+                    Object.keys(board.members).forEach(uid => memberIds.add(uid));
+                });
+
+                const newUsers = new Map(allUsers);
+                const usersToFetch = Array.from(memberIds).filter(uid => !newUsers.has(uid));
+                
+                if (usersToFetch.length > 0) {
+                    const userDocs = await Promise.all(usersToFetch.map(uid => getDoc(doc(db, 'users', uid))));
+                    userDocs.forEach(userDoc => {
+                        if (userDoc.exists()) {
+                            newUsers.set(userDoc.id, userDoc.data() as UserProfile);
+                        }
+                    });
+                    setAllUsers(newUsers);
                 }
 
-                const boardsQuery = query(
-                    collection(db, `workspaces/${workpanelId}/boards`),
-                    where(`members.${user.uid}`, 'in', ['owner', 'editor', 'viewer'])
-                );
-
-                unsubscribe = onSnapshot(boardsQuery, async (querySnapshot) => {
-                    const boardsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
-                    setBoards(boardsData);
-
-                    // Fetch user profiles for all members of all boards
-                    const memberIds = new Set<string>();
-                    boardsData.forEach(board => {
-                        Object.keys(board.members).forEach(uid => memberIds.add(uid));
-                    });
-
-                    const newUsers = new Map(allUsers);
-                    const usersToFetch = Array.from(memberIds).filter(uid => !newUsers.has(uid));
-                    
-                    if (usersToFetch.length > 0) {
-                        const userDocs = await Promise.all(usersToFetch.map(uid => getDoc(doc(db, 'users', uid))));
-                        userDocs.forEach(userDoc => {
-                            if (userDoc.exists()) {
-                                newUsers.set(userDoc.id, userDoc.data() as UserProfile);
-                            }
-                        });
-                        setAllUsers(newUsers);
-                    }
-
-                    setError(null);
-                    setLoading(false);
-                }, (err) => {
-                    console.error("Error fetching boards:", err);
-                    setError("Failed to load boards. Please check your permissions and try again.");
-                    setLoading(false);
-                });
-            } catch (e) {
-                setError("An unexpected error occurred during setup.");
+                setError(null);
                 setLoading(false);
-            }
-        };
+            }, (err) => {
+                console.error("Error fetching boards:", err);
+                setError("Failed to load boards. Please check your permissions and try again.");
+                setLoading(false);
+            });
 
-        setupListener();
+            return () => unsubscribeBoards();
+        }, (err) => {
+            console.error("Error fetching workpanel:", err);
+            setError("Failed to load workpanel data.");
+            setLoading(false);
+        });
 
-        return () => unsubscribe();
+        return () => unsubscribeWorkpanel();
     }, [user, workpanelId, ensureWorkspaceExists, allUsers]);
 
     const openDeleteDialog = (board: Board) => {
@@ -349,6 +352,8 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         )
     }
 
+    const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
+
     return (
         <>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -356,6 +361,8 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                     const boardMembers = Object.keys(board.members)
                         .map(uid => allUsers.get(uid))
                         .filter((u): u is UserProfile => !!u);
+                    
+                    const canDelete = currentUserRole === 'admin' || (user?.uid === board.ownerId);
 
                     return (
                         <BoardCard
@@ -364,6 +371,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                             workpanelId={workpanelId}
                             boardMembers={boardMembers}
                             openDeleteDialog={openDeleteDialog}
+                            canDelete={canDelete}
                         />
                     );
                 })}
