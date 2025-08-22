@@ -62,6 +62,7 @@ export interface BoardMember extends UserProfile {
 export interface Board {
     id: string;
     name: string;
+    description: string;
     ownerId: string;
     members: { [key: string]: BoardRole };
 }

@@ -19,7 +19,7 @@ import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, wr
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
-import { UserProfile, BoardMember, WorkpanelRole } from "./board/types";
+import { UserProfile, Board as BoardType, WorkpanelRole } from "./board/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 interface Board {
@@ -144,7 +144,7 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
     )
 }
 
-function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDelete }: { board: Board, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void, canDelete: boolean }) {
+function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDelete }: { board: BoardType, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: BoardType) => void, canDelete: boolean }) {
     const owner = boardMembers.find(m => m.uid === board.ownerId);
 
     return (
@@ -205,7 +205,7 @@ function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDele
 }
 
 export function DashboardClient({ workpanelId }: { workpanelId: string }) {
-    const [boards, setBoards] = useState<Board[]>([]);
+    const [boards, setBoards] = useState<BoardType[]>([]);
     const [workpanel, setWorkpanel] = useState<Workpanel | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -214,7 +214,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const [allUsers, setAllUsers] = useState<Map<string, UserProfile>>(new Map());
 
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-    const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
+    const [boardToDelete, setBoardToDelete] = useState<BoardType | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
@@ -238,7 +238,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
             const unsubscribeBoards = onSnapshot(boardsQuery, async (querySnapshot) => {
                 const boardsData = querySnapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() } as Board))
+                    .map(doc => ({ id: doc.id, ...doc.data() } as BoardType))
                     .filter(board => board.members && board.members[user.uid]); // Client-side filter for membership
 
                 setBoards(boardsData);
@@ -279,7 +279,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         return () => unsubscribeWorkpanel();
     }, [user, workpanelId, allUsers]);
 
-    const openDeleteDialog = (board: Board) => {
+    const openDeleteDialog = (board: BoardType) => {
         setBoardToDelete(board);
         setIsDeleteDialogOpen(true);
     };
@@ -339,7 +339,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     }
 
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
-    const canCreateBoards = currentUserRole === 'admin';
+    const canCreateBoards = currentUserRole === 'admin' || currentUserRole === 'manager';
 
     return (
         <>
@@ -388,5 +388,3 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </>
     )
 }
-
-    
