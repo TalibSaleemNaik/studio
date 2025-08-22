@@ -65,9 +65,8 @@ function CreateBoardDialog({ workpanelId, onBoardCreated }: { workpanelId: strin
                 members: boardMembers
             });
 
-            batch.set(workpanelRef, {
-                members: { [user.uid]: 'owner' }
-            }, { merge: true });
+            // Note: The logic for inheriting members from workpanel might be needed here
+            // or handled separately. For now, only the creator is a member.
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
             for (let i = 0; i < defaultGroups.length; i++) {
@@ -218,21 +217,6 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const ensureWorkspaceExists = useCallback(async (uid: string) => {
-        if (!uid || !workpanelId) return;
-        try {
-            const workspaceRef = doc(db, `workspaces/${workpanelId}`);
-            await setDoc(workspaceRef, {
-                name: "Default Workspace",
-                ownerId: uid,
-                members: { [uid]: 'admin' } // The creator is an admin by default
-            }, { merge: true });
-        } catch (e) {
-            console.error("Error ensuring workpanel exists:", e);
-            setError("Failed to initialize your workpanel. Please try again.");
-        }
-    }, [workpanelId]);
-
     useEffect(() => {
         if (!user) {
             setLoading(true);
@@ -242,8 +226,10 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         const workpanelRef = doc(db, `workspaces/${workpanelId}`);
         const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
             if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
-                await ensureWorkspaceExists(user.uid);
-                // After ensuring it exists, the listener will be re-triggered.
+                // This could mean the workpanel doesn't exist, or the user isn't a member.
+                // For now, we'll show an error. A more robust solution could check for existence first.
+                setError("You do not have permission to view this workpanel.");
+                setLoading(false);
                 return;
             }
 
@@ -253,7 +239,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             const unsubscribeBoards = onSnapshot(boardsQuery, async (querySnapshot) => {
                 const boardsData = querySnapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() } as Board))
-                    .filter(board => board.members && board.members[user.uid]); // Client-side filter
+                    .filter(board => board.members && board.members[user.uid]); // Client-side filter for membership
 
                 setBoards(boardsData);
 
@@ -291,7 +277,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         });
 
         return () => unsubscribeWorkpanel();
-    }, [user, workpanelId, ensureWorkspaceExists, allUsers]);
+    }, [user, workpanelId, allUsers]);
 
     const openDeleteDialog = (board: Board) => {
         setBoardToDelete(board);
@@ -353,6 +339,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     }
 
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
+    const canCreateBoards = currentUserRole === 'admin';
 
     return (
         <>
@@ -375,7 +362,9 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                         />
                     );
                 })}
-                <CreateBoardDialog workpanelId={workpanelId} onBoardCreated={() => { /* Data will refetch via snapshot listener */ }} />
+                {canCreateBoards && (
+                    <CreateBoardDialog workpanelId={workpanelId} onBoardCreated={() => { /* Data will refetch via snapshot listener */ }} />
+                )}
             </div>
             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <AlertDialogContent>
@@ -399,3 +388,5 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </>
     )
 }
+
+    
