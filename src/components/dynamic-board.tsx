@@ -27,7 +27,7 @@ import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
-import { TableView } from './table-view';
+import { TableView } from './board/table-view';
 import { useSearchParams } from 'next/navigation';
 
 function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
@@ -282,7 +282,12 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         workpanelData: { members: { [key: string]: WorkpanelRole } } | null
     ): BoardRole => {
         // Highest priority: direct board role
-        if (boardData.members[uid]) return boardData.members[uid];
+        if (boardData.members[uid]) {
+            const directRole = boardData.members[uid];
+            if (directRole === 'manager' || directRole === 'editor' || directRole === 'viewer') {
+                return directRole;
+            }
+        }
 
         // Second priority: TeamRoom role
         if (teamRoomData?.members[uid]) {
@@ -345,7 +350,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
         setUserRole(effectiveRole);
 
-        if (effectiveRole === 'guest') {
+        if (effectiveRole === 'guest' && !boardData.isPrivate) {
              setError("You do not have permission to view this board.");
              setLoading(false);
              return;
