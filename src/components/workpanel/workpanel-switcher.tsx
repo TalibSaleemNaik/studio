@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, setDoc, updateDoc, arrayUnion, getDoc, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
