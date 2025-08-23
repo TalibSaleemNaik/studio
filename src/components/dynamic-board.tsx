@@ -127,11 +127,43 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
         }
 
         try {
-            const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             const memberToRemove = boardMembers.find(m => m.uid === memberId);
-            await updateDoc(boardRef, {
-                [`members.${memberId}`]: deleteField(),
-                memberUids: arrayRemove(memberId)
+            if (!memberToRemove) throw new Error("Member not found");
+
+            await runTransaction(db, async (transaction) => {
+                const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+                const userDocRef = doc(db, 'users', memberId);
+
+                // Remove user from board
+                transaction.update(boardRef, {
+                    [`members.${memberId}`]: deleteField(),
+                    memberUids: arrayRemove(memberId)
+                });
+
+                // Check if user has any other access to this workpanel
+                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
+                if (workpanelDoc.exists() && workpanelDoc.data().members[memberId]) {
+                    return; // User is a workpanel member, so don't remove access
+                }
+
+                // Check other teamrooms
+                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+                const teamRoomsSnap = await getDocs(teamRoomsQuery);
+                 if (teamRoomsSnap.size > 0) {
+                     return; // User has access via another teamroom
+                 }
+
+                // Check other boards, excluding the current one
+                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+                const boardsSnap = await getDocs(boardsQuery);
+                 if (boardsSnap.docs.filter(d => d.id !== boardId).length > 0) {
+                     return; // User has access via another board
+                 }
+                
+                // If no other access found, remove from accessibleWorkpanels
+                transaction.update(userDocRef, {
+                    accessibleWorkpanels: arrayRemove(workpanelId)
+                });
             });
 
             if (user && memberToRemove) {

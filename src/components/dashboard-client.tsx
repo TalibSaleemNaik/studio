@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -117,13 +118,42 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
             return;
         }
         try {
-            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
-            await updateDoc(teamRoomRef, { 
-                [`members.${memberId}`]: deleteField(),
-                memberUids: arrayRemove(memberId)
+            await runTransaction(db, async (transaction) => {
+                const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
+                const userDocRef = doc(db, 'users', memberId);
+
+                // Remove user from teamroom
+                transaction.update(teamRoomRef, { 
+                    [`members.${memberId}`]: deleteField(),
+                    memberUids: arrayRemove(memberId)
+                });
+
+                 // Check if user has any other access to this workpanel
+                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
+                if (workpanelDoc.exists() && workpanelDoc.data().members[memberId]) {
+                    return; // User is a workpanel member, so don't remove access
+                }
+
+                // Check other teamrooms, excluding the current one
+                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+                const teamRoomsSnap = await getDocs(teamRoomsQuery);
+                 if (teamRoomsSnap.docs.filter(d => d.id !== teamRoom.id).length > 0) {
+                     return; // User has access via another teamroom
+                 }
+
+                // Check other boards
+                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+                const boardsSnap = await getDocs(boardsQuery);
+                 if (boardsSnap.size > 0) {
+                     return; // User has access via a board
+                 }
+                
+                // If no other access found, remove from accessibleWorkpanels
+                transaction.update(userDocRef, {
+                    accessibleWorkpanels: arrayRemove(workpanelId)
+                });
             });
-            // Note: We are NOT removing the workpanel from their accessible list here.
-            // They might have access via another board or room. A cleanup script could handle this.
+
             toast({ title: "Member removed from TeamRoom." });
             onUpdate();
         } catch (error: any) {
@@ -484,7 +514,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
-
+    
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
 
     const visibleBoards = React.useMemo(() => {
