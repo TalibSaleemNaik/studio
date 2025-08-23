@@ -48,8 +48,7 @@ export interface UserProfile {
 }
 
 export type WorkpanelRole = 'owner' | 'admin' | 'member' | 'viewer' | 'guest';
-export type TeamRoomRole = 'manager' | 'editor' | 'viewer' | 'guest';
-export type BoardRole = 'manager' | 'editor' | 'viewer';
+export type TeamRoomRole = 'manager' | 'editor' | 'viewer';
 
 
 export interface WorkpanelMember {
@@ -77,7 +76,11 @@ export interface Board {
     members: { [key: string]: BoardRole };
     isPrivate?: boolean;
     teamRoomId?: string;
+    workpanelId?: string;
 }
+
+export type BoardRole = 'manager' | 'editor' | 'viewer';
+
 
 export interface Comment {
   id: string;

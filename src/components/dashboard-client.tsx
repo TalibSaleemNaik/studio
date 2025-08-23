@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy, updateDoc, deleteField } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy, updateDoc, deleteField, collectionGroup } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
@@ -36,6 +36,7 @@ interface TeamRoom extends TeamRoomType {
 }
 
 interface Workpanel {
+    id: string;
     members: { [key: string]: WorkpanelRole };
 }
 
@@ -286,6 +287,7 @@ function CreateBoardDialog({ workpanelId, teamRoomId, onBoardCreated }: { workpa
                 members: boardMembers,
                 isPrivate: isPrivate,
                 teamRoomId: teamRoomId,
+                workpanelId: workpanelId, // Add workpanelId to board document
             });
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
@@ -455,7 +457,6 @@ function BoardCard({ board, workpanelId, teamRooms, boardMembers, openDeleteDial
 export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const [teamRooms, setTeamRooms] = useState<TeamRoom[]>([]);
     const [boards, setBoards] = useState<Board[]>([]);
-
     const [workpanel, setWorkpanel] = useState<Workpanel | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -473,93 +474,84 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             return;
         }
 
-        const workpanelRef = doc(db, `workspaces/${workpanelId}`);
-        const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
-            if (!workspaceSnap.exists()) {
-                setError("You do not have permission to view this workpanel.");
-                setLoading(false);
-                return;
-            }
-            const workpanelData = workspaceSnap.data() as Workpanel;
-             if (!workpanelData?.members?.[user.uid]) {
-                setError("You are not a member of this workpanel.");
-                setLoading(false);
-                return;
-            }
-            setWorkpanel(workpanelData);
-            
-            // Fetch users in the workpanel
-            const memberIds = Object.keys(workpanelData.members);
-            if (memberIds.length > 0) {
-                 const userDocs = await Promise.all(memberIds.map(uid => getDoc(doc(db, 'users', uid))));
-                 const newAllUsers = new Map<string, UserProfile>();
-                 userDocs.forEach(userDoc => {
-                    if (userDoc.exists()) {
-                        newAllUsers.set(userDoc.id, userDoc.data() as UserProfile);
+        const fetchAllAccessibleData = async () => {
+            setLoading(true);
+            try {
+                // 1. Get workpanels user is a direct member of
+                const workpanelsQuery = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['owner', 'admin', 'member', 'viewer']));
+                const workpanelsSnapshot = await getDocs(workpanelsQuery);
+                const directWorkpanelIds = new Set(workpanelsSnapshot.docs.map(doc => doc.id));
+
+                // 2. Get workpanels containing teamrooms user is a member of
+                const teamRoomsQuery = query(collectionGroup(db, 'teamRooms'), where(`members.${user.uid}`, 'in', ['manager', 'editor', 'viewer']));
+                const teamRoomsSnapshot = await getDocs(teamRoomsQuery);
+                const teamRoomWorkpanelIds = new Set(teamRoomsSnapshot.docs.map(doc => doc.data().workpanelId));
+                
+                // 3. Get workpanels containing boards user is a member of
+                const boardsQuery = query(collectionGroup(db, 'boards'), where(`members.${user.uid}`, 'in', ['manager', 'editor', 'viewer']));
+                const boardsSnapshot = await getDocs(boardsQuery);
+                const boardWorkpanelIds = new Set(boardsSnapshot.docs.map(doc => doc.data().workpanelId));
+
+                const allWorkpanelIds = new Set([...directWorkpanelIds, ...teamRoomWorkpanelIds, ...boardWorkpanelIds]);
+
+                if (!allWorkpanelIds.has(workpanelId)) {
+                     setError("You do not have permission to view this workpanel.");
+                     setLoading(false);
+                     return;
+                }
+                
+                const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+                const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
+                    if (!workspaceSnap.exists()) {
+                        setError("This workpanel does not exist.");
+                        setLoading(false);
+                        return;
                     }
-                 });
-                 setAllUsers(newAllUsers);
-            }
-            
-            const userWorkpanelRole = workpanelData.members[user.uid];
+                    const workpanelData = { id: workspaceSnap.id, ...workspaceSnap.data() } as Workpanel;
+                    setWorkpanel(workpanelData);
+                    
+                    const memberIds = Object.keys(workpanelData.members);
+                    if (memberIds.length > 0) {
+                         const userDocs = await Promise.all(memberIds.map(uid => getDoc(doc(db, 'users', uid))));
+                         const newAllUsers = new Map<string, UserProfile>();
+                         userDocs.forEach(userDoc => {
+                            if (userDoc.exists()) {
+                                newAllUsers.set(userDoc.id, userDoc.data() as UserProfile);
+                            }
+                         });
+                         setAllUsers(newAllUsers);
+                    }
+                    
+                    const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
+                    const unsubscribeTeamRooms = onSnapshot(teamRoomsQuery, (teamRoomsSnapshot) => {
+                        const teamRoomsData = teamRoomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom));
+                        setTeamRooms(teamRoomsData);
 
-            // Fetch TeamRooms
-            const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
-            const unsubscribeTeamRooms = onSnapshot(teamRoomsQuery, (teamRoomsSnapshot) => {
-                const teamRoomsData = teamRoomsSnapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom))
-                    .filter(teamRoom => {
-                        if (['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole)) return true;
-                        if (teamRoom.members && user.uid && teamRoom.members[user.uid]) return true;
-                        return false;
-                    });
-                setTeamRooms(teamRoomsData);
-
-                // Fetch Boards
-                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
-                const unsubscribeBoards = onSnapshot(boardsQuery, async (boardsSnapshot) => {
-                    const boardsData = boardsSnapshot.docs
-                        .map(doc => ({ id: doc.id, ...doc.data() } as Board))
-                        .filter(board => {
-                            if (!user.uid) return false;
-                            
-                            // Direct member of the board
-                            if (board.members && board.members[user.uid]) {
-                                return true;
-                            }
-                            
-                            // Member of the parent TeamRoom
-                            const teamRoom = teamRoomsData.find(f => f.id === board.teamRoomId);
-                            if (teamRoom && teamRoom.members && teamRoom.members[user.uid]) {
-                                return true;
-                            }
-
-                            // High-level Workpanel member with broad access
-                            if (['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole) && !board.isPrivate) {
-                                return true;
-                            }
-                            
-                            // Owner/Admin can see even private boards
-                            if (['owner', 'admin'].includes(userWorkpanelRole)) {
-                                return true;
-                            }
-                            
-                            return false;
+                        const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
+                        const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
+                            const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+                            setBoards(boardsData);
+                            setError(null);
                         });
-                    setBoards(boardsData);
-                    setError(null);
-                    setLoading(false);
+                        return () => unsubscribeBoards();
+                    });
+                    return () => unsubscribeTeamRooms();
+                }, (err) => {
+                    console.error("Error fetching workpanel:", err);
+                    setError("Failed to load workpanel data.");
                 });
-                return () => unsubscribeBoards();
-            });
-            return () => unsubscribeTeamRooms();
-        }, (err) => {
-            console.error("Error fetching workpanel:", err);
-            setError("Failed to load workpanel data.");
-            setLoading(false);
-        });
+                
+                return () => unsubscribeWorkpanel();
+            } catch (err) {
+                 console.error("Error fetching accessible data:", err);
+                 setError("Failed to determine your access permissions.");
+            } finally {
+                setLoading(false);
+            }
+        };
 
-        return () => unsubscribeWorkpanel();
+        fetchAllAccessibleData();
+
     }, [user, workpanelId]);
     
     const boardsByTeamRoom = React.useMemo(() => {
@@ -702,6 +694,43 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             </Droppable>
         );
     };
+    
+    // Filter rooms and boards based on user's direct or inherited permissions
+    const visibleTeamRooms = teamRooms.filter(teamRoom => {
+        if (!user) return false;
+        if (currentUserRole && ['owner', 'admin', 'member', 'viewer'].includes(currentUserRole)) return true;
+        return teamRoom.members && teamRoom.members[user.uid];
+    });
+
+    const visibleBoards = boards.filter(board => {
+        if (!user) return false;
+        if (currentUserRole && ['owner', 'admin', 'member', 'viewer'].includes(currentUserRole) && !board.isPrivate) return true;
+        if (currentUserRole && ['owner', 'admin'].includes(currentUserRole)) return true;
+        if (board.members && board.members[user.uid]) return true;
+
+        const parentRoom = teamRooms.find(r => r.id === board.teamRoomId);
+        if (parentRoom && parentRoom.members && parentRoom.members[user.uid]) return true;
+        
+        return false;
+    });
+
+    const visibleBoardsByTeamRoom = React.useMemo(() => {
+        const grouped: {[key: string]: Board[]} = {};
+        visibleTeamRooms.forEach(teamRoom => {
+            grouped[teamRoom.id] = [];
+        });
+        visibleBoards.forEach(board => {
+            if (board.teamRoomId && grouped[board.teamRoomId]) {
+                grouped[board.teamRoomId].push(board);
+            }
+        });
+        return grouped;
+    }, [visibleTeamRooms, visibleBoards]);
+
+    const visibleUnassignedBoards = React.useMemo(() => {
+        return visibleBoards.filter(board => !board.teamRoomId);
+    }, [visibleBoards]);
+
 
     return (
         <DragDropContext onDragEnd={onDragEnd}>
@@ -710,8 +739,8 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                      <CreateTeamRoomDialog workpanelId={workpanelId} />
                 </div>
             )}
-            <Accordion type="multiple" defaultValue={teamRooms.map(f => f.id)} className="w-full space-y-4">
-                 {teamRooms.map(teamRoom => {
+            <Accordion type="multiple" defaultValue={visibleTeamRooms.map(f => f.id)} className="w-full space-y-4">
+                 {visibleTeamRooms.map(teamRoom => {
                     const userTeamRoomRole = user?.uid ? teamRoom.members?.[user.uid] : undefined;
                     const canCreateBoardsInRoom = canCreate || userTeamRoomRole === 'manager' || userTeamRoomRole === 'editor';
                      
@@ -724,17 +753,17 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                 <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={()=>{}} />
                             </div>
                             <AccordionContent className="pt-4 px-2">
-                                {renderBoardGrid(boardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
+                                {renderBoardGrid(visibleBoardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
                             </AccordionContent>
                         </AccordionItem>
                     )
                 })}
             </Accordion>
            
-            {(unassignedBoards.length > 0 || teamRooms.length === 0) && (
+            {(visibleUnassignedBoards.length > 0 || visibleTeamRooms.length === 0) && (
                 <div className="mt-8">
                     <h2 className="text-xl font-headline font-semibold mb-4">Uncategorized Boards</h2>
-                    {renderBoardGrid(unassignedBoards, 'unassigned', canCreate)}
+                    {renderBoardGrid(visibleUnassignedBoards, 'unassigned', canCreate)}
                 </div>
             )}
             
@@ -760,5 +789,3 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
-
-    
