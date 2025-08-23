@@ -67,25 +67,10 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 return;
             }
             
-            const batch = writeBatch(db);
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
-            batch.update(boardRef, {
-                [`members.${userId}`]: 'editor'
+            await updateDoc(boardRef, {
+                [`members.${userId}`]: 'editor' // Default role for direct board invite
             });
-
-            // Grant guest access to workpanel if not already a member
-            const workpanelRef = doc(db, `workspaces/${workpanelId}`);
-            const workpanelSnap = await getDoc(workpanelRef);
-            if (workpanelSnap.exists()) {
-                const workpanelData = workpanelSnap.data() as { members: { [key: string]: WorkpanelRole } };
-                if (!workpanelData.members[userId]) {
-                     batch.update(workpanelRef, {
-                        [`members.${userId}`]: 'guest'
-                    });
-                }
-            }
-            
-            await batch.commit();
             
             if (user) {
                  const simpleUser: SimpleUser = {
@@ -229,7 +214,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<BoardType | null>(null);
-  const [userRole, setUserRole] = React.useState<BoardRole>('guest');
+  const [userRole, setUserRole] = React.useState<BoardRole | 'guest'>('guest');
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
@@ -302,48 +287,30 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         boardData: BoardType,
         teamRoomData: TeamRoomType | null,
         workpanelData: { members: { [key: string]: WorkpanelRole } } | null
-    ): BoardRole => {
-        const roleHierarchy: BoardRole[] = ['viewer', 'editor', 'manager'];
+    ): BoardRole | 'guest' => {
         
-        const roles: BoardRole[] = [];
-
-        // Direct board role
-        if (boardData.members[uid]) {
-            const directRole = boardData.members[uid];
-            if (roleHierarchy.includes(directRole)) {
-                roles.push(directRole);
-            }
+        // 1. Check for direct board role
+        if (boardData.members && boardData.members[uid]) {
+            return boardData.members[uid];
         }
 
-        // TeamRoom role inheritance
-        if (teamRoomData?.members[uid]) {
+        // 2. Check for parent TeamRoom role and convert to board role
+        if (teamRoomData?.members && teamRoomData.members[uid]) {
             const teamRoomRole = teamRoomData.members[uid];
-            if (teamRoomRole === 'manager') roles.push('manager');
-            if (teamRoomRole === 'editor') roles.push('editor');
-            if (teamRoomRole === 'viewer') roles.push('viewer');
+            if (teamRoomRole === 'manager') return 'manager';
+            if (teamRoomRole === 'editor') return 'editor';
+            if (teamRoomRole === 'viewer') return 'viewer';
         }
         
-        // Workpanel role inheritance
-        if (workpanelData?.members[uid]) {
+        // 3. Check for parent Workpanel role and convert to board role
+        if (workpanelData?.members && workpanelData.members[uid]) {
             const workpanelRole = workpanelData.members[uid];
-            if (workpanelRole === 'owner' || workpanelRole === 'admin') roles.push('manager');
-            if (workpanelRole === 'member') roles.push('editor');
-            if (workpanelRole === 'viewer') roles.push('viewer');
+            if (workpanelRole === 'owner' || workpanelRole === 'admin') return 'manager';
+            if (workpanelRole === 'member') return 'editor';
+            if (workpanelRole === 'viewer') return 'viewer';
         }
         
-        if (roles.length === 0) {
-            return 'guest';
-        }
-
-        // Return the highest-level role from the collected roles
-        let highestRole: BoardRole = 'guest';
-        for (const role of roles) {
-            if (roleHierarchy.indexOf(role) > roleHierarchy.indexOf(highestRole)) {
-                highestRole = role;
-            }
-        }
-
-        return highestRole;
+        return 'guest'; // Default if no role is found
     }, []);
 
   React.useEffect(() => {
@@ -579,7 +546,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
     );
   }
   
-  if (!columns || !board || !workpanelId) {
+  if (!columns || !board || !workpanelId || userRole === 'guest') {
     return <BoardSkeleton />;
   }
 
@@ -817,3 +784,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    

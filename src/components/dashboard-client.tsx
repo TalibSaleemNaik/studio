@@ -70,26 +70,11 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                 throw new Error("User is already a member of this TeamRoom.");
             }
 
-            const batch = writeBatch(db);
             const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
-            batch.update(teamRoomRef, {
+            await updateDoc(teamRoomRef, {
                 [`members.${userToInviteId}`]: 'editor' // Default role
             });
-
-            // Grant guest access to workpanel if not already a member
-            const workpanelRef = doc(db, `workspaces/${workpanelId}`);
-            const workpanelSnap = await getDoc(workpanelRef);
-            if (workpanelSnap.exists()) {
-                const workpanelData = workpanelSnap.data() as Workpanel;
-                if (!workpanelData.members[userToInviteId]) {
-                     batch.update(workpanelRef, {
-                        [`members.${userToInviteId}`]: 'guest'
-                    });
-                }
-            }
             
-            await batch.commit();
-
             toast({ title: "User invited to TeamRoom!" });
             setInviteEmail('');
             onUpdate();
@@ -536,19 +521,26 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                     const boardsData = boardsSnapshot.docs
                         .map(doc => ({ id: doc.id, ...doc.data() } as Board))
                         .filter(board => {
-                            const teamRoom = teamRoomsData.find(f => f.id === board.teamRoomId);
-                            const hasTeamRoomAccess = teamRoom && teamRoom.members && user.uid && teamRoom.members[user.uid];
-                            const canViewViaWorkpanel = ['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole);
-
-                            if (!board.isPrivate && (canViewViaWorkpanel || hasTeamRoomAccess)) {
+                            if (!user.uid) return false;
+                            
+                            // Direct member of the board
+                            if (board.members && board.members[user.uid]) {
                                 return true;
                             }
                             
-                            if (board.isPrivate && board.members && user.uid && board.members[user.uid]) {
+                            // Member of the parent TeamRoom
+                            const teamRoom = teamRoomsData.find(f => f.id === board.teamRoomId);
+                            if (teamRoom && teamRoom.members && teamRoom.members[user.uid]) {
                                 return true;
                             }
-                           
-                            if (userWorkpanelRole === 'owner' || userWorkpanelRole === 'admin') {
+
+                            // High-level Workpanel member with broad access
+                            if (['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole) && !board.isPrivate) {
+                                return true;
+                            }
+                            
+                            // Owner/Admin can see even private boards
+                            if (['owner', 'admin'].includes(userWorkpanelRole)) {
                                 return true;
                             }
                             
@@ -768,3 +760,5 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
+
+    
