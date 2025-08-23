@@ -260,12 +260,16 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
 
   const filteredColumns = React.useMemo(() => {
       if (!columns) return {};
+      // If the user is a viewer, we still want to show all columns, even if they are empty.
+      // But the tasks within them should be filtered.
+      const taskIdsToShow = new Set(filteredTasks.map(t => t.id));
+
       return Object.fromEntries(
         Object.entries(columns).map(([columnId, column]) => [
             columnId,
             {
                 ...column,
-                items: column.items.filter(item => filteredTasks.some(t => t.id === item.id))
+                items: column.items.filter(item => taskIdsToShow.has(item.id))
             }
         ])
       );
@@ -295,6 +299,11 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
             if (workpanelRole === 'member') return 'editor';
             if (workpanelRole === 'viewer') return 'viewer';
         }
+        
+        // Final check for non-private boards within a workpanel the user is part of
+        if (!boardData.isPrivate && workpanelData?.members[uid]) {
+            return 'viewer';
+        }
 
         return 'guest';
     }, []);
@@ -317,7 +326,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
             setLoading(false);
             return;
         }
-        const boardData = { id: boardSnap.id, ...boardSnap.data() as BoardType };
+        const boardData = { id: boardSnap.id, ...boardSnap.data() } as BoardType;
         setBoard(boardData);
         setError(null);
         
@@ -330,26 +339,16 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         if (boardData.teamRoomId) {
             const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, boardData.teamRoomId);
             const teamRoomSnap = await getDoc(teamRoomRef);
-            teamRoomData = teamRoomSnap.exists() ? teamRoomSnap.data() as TeamRoomType : null;
+            teamRoomData = teamRoomSnap.exists() ? {id: teamRoomSnap.id, ...teamRoomSnap.data()} as TeamRoomType : null;
         }
         
         const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
         setUserRole(effectiveRole);
 
         if (effectiveRole === 'guest') {
-            if (!boardData.isPrivate) {
-                // This case should ideally be handled by dashboard logic, but as a safeguard:
-                const isWorkpanelPublicMember = ['owner', 'admin', 'member', 'viewer'].includes(workpanelData?.members[user.uid] || 'guest');
-                if (!isWorkpanelPublicMember) {
-                    setError("You do not have permission to view this board.");
-                    setLoading(false);
-                    return;
-                }
-            } else {
-                 setError("You do not have permission to view this private board.");
-                 setLoading(false);
-                 return;
-            }
+             setError("You do not have permission to view this board.");
+             setLoading(false);
+             return;
         }
 
 

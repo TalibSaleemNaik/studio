@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { Loader2, Sparkles, UserPlus, MessageSquare, Trash, Trash2, Calendar, Paperclip, File, UploadCloud, Download } from 'lucide-react';
+import { Loader2, Sparkles, UserPlus, MessageSquare, Trash, Trash2, Calendar, Paperclip, File, UploadCloud, Download, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { db, storage } from '@/lib/firebase';
@@ -27,7 +27,7 @@ import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Flag } from 'lucide-react';
 import { format } from 'date-fns';
-import { Task, ChecklistItem, Comment, BoardMember, Attachment } from './types';
+import { Task, ChecklistItem, Comment, BoardMember, Attachment, BoardRole } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
@@ -44,7 +44,7 @@ const priorityConfig = {
 };
 
 
-export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boardMembers, isOpen, onOpenChange, onDelete }: { task: Task; workspaceId: string; boardId:string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; }) {
+export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boardMembers, isOpen, onOpenChange, onDelete, userRole }: { task: Task; workspaceId: string; boardId:string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; userRole: BoardRole; }) {
     const { user } = useAuth();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = React.useState(false);
@@ -57,6 +57,10 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
     const [isPostingComment, setIsPostingComment] = React.useState(false);
     const [newChecklistItem, setNewChecklistItem] = React.useState("");
     const { toast } = useToast();
+    
+    const isAssignedToCurrentUser = user ? task.assignees?.includes(user.uid) : false;
+    const canEditTask = userRole === 'manager' || (userRole === 'editor' && isAssignedToCurrentUser);
+    const isViewer = userRole === 'viewer';
     
     const checklistProgress = React.useMemo(() => {
         if (!editedTask.checklist || editedTask.checklist.length === 0) return 0;
@@ -358,7 +362,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                 <SheetHeader>
                     <SheetTitle>Task Details</SheetTitle>
                     <SheetDescription>
-                        Edit the details of your task. Changes are saved automatically.
+                        { isViewer ? "You have view-only access to this task." : "Edit the details of your task. Changes are saved automatically." }
                     </SheetDescription>
                 </SheetHeader>
                 <div className="flex-1 overflow-y-auto pr-4 -mr-4">
@@ -372,6 +376,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                 onChange={(e) => setEditedTask({...editedTask, content: e.target.value})}
                                 onBlur={() => handleBlurUpdate('content', (oldVal, newVal) => `renamed task to "${newVal}" (from "${oldVal}")`)}
                                 className="text-lg font-semibold"
+                                disabled={!canEditTask}
                             />
                         </div>
 
@@ -385,6 +390,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                 onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
                                 onBlur={() => handleBlurUpdate('description', () => `updated the description for task "${editedTask.content}"`)}
                                 rows={6}
+                                disabled={!canEditTask}
                              />
                         </div>
                         
@@ -392,7 +398,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                             <div className='space-y-2'>
                                 <Label>Due Date</Label>
                                 <Popover>
-                                    <PopoverTrigger asChild>
+                                    <PopoverTrigger asChild disabled={!canEditTask}>
                                         <Button
                                             variant={"outline"}
                                             className={cn(
@@ -423,6 +429,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                         setEditedTask({...editedTask, priority: value as Task['priority']});
                                         handleFieldUpdate('priority', value as Task['priority'], logMessage);
                                     }}
+                                    disabled={!canEditTask}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Set priority" />
@@ -460,7 +467,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                          <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <Label>Labels</Label>
-                                <Button variant="ghost" size="sm" onClick={handleGenerateTags} disabled={isGeneratingTags}>
+                                <Button variant="ghost" size="sm" onClick={handleGenerateTags} disabled={isGeneratingTags || !canEditTask}>
                                     {isGeneratingTags ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
                                     AI Suggest
                                 </Button>
@@ -469,9 +476,11 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                 {editedTask.tags?.map(tag => (
                                     <Badge key={tag} variant="secondary" className="flex items-center gap-1">
                                         {tag}
-                                        <button onClick={() => handleRemoveTag(tag)} className="rounded-full hover:bg-black/10">
-                                            <X className="h-3 w-3" />
-                                        </button>
+                                        {canEditTask && (
+                                            <button onClick={() => handleRemoveTag(tag)} className="rounded-full hover:bg-black/10">
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        )}
                                     </Badge>
                                 ))}
                             </div>
@@ -480,6 +489,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                 value={newTag}
                                 onChange={(e) => setNewTag(e.target.value)}
                                 onKeyDown={handleAddTag}
+                                disabled={!canEditTask}
                             />
                         </div>
                         
@@ -492,39 +502,41 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                         <AvatarFallback>{assignee.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                 ))}
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline" size="icon" className="rounded-full">
-                                            <UserPlus className="h-4 w-4" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="p-0">
-                                        <Command>
-                                            <CommandInput placeholder="Assign to..." />
-                                            <CommandList>
-                                                <CommandEmpty>No users found.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {boardMembers.map(member => (
-                                                        <CommandItem
-                                                            key={member.uid}
-                                                            onSelect={() => toggleAssignee(member.uid)}
-                                                        >
-                                                            <Checkbox
-                                                                className="mr-2"
-                                                                checked={editedTask.assignees?.includes(member.uid)}
-                                                            />
-                                                            <Avatar className="h-6 w-6 mr-2">
-                                                                <AvatarImage src={member.photoURL} />
-                                                                <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
-                                                            </Avatar>
-                                                            <span>{member.displayName}</span>
-                                                        </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
+                                {userRole === 'manager' && (
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" size="icon" className="rounded-full">
+                                                <UserPlus className="h-4 w-4" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="p-0">
+                                            <Command>
+                                                <CommandInput placeholder="Assign to..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No users found.</CommandEmpty>
+                                                    <CommandGroup>
+                                                        {boardMembers.map(member => (
+                                                            <CommandItem
+                                                                key={member.uid}
+                                                                onSelect={() => toggleAssignee(member.uid)}
+                                                            >
+                                                                <Checkbox
+                                                                    className="mr-2"
+                                                                    checked={editedTask.assignees?.includes(member.uid)}
+                                                                />
+                                                                <Avatar className="h-6 w-6 mr-2">
+                                                                    <AvatarImage src={member.photoURL} />
+                                                                    <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                                                </Avatar>
+                                                                <span>{member.displayName}</span>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                )}
                             </div>
                         </div>
 
@@ -539,6 +551,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                                 id={`checklist-${item.id}`}
                                                 checked={item.completed}
                                                 onCheckedChange={() => toggleChecklistItem(item.id)}
+                                                disabled={!canEditTask}
                                             />
                                             <label
                                                 htmlFor={`checklist-${item.id}`}
@@ -546,14 +559,16 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                             >
                                                 {item.text}
                                             </label>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                                                onClick={() => handleDeleteChecklistItem(item.id)}
-                                            >
-                                                <Trash className="h-4 w-4" />
-                                            </Button>
+                                            {canEditTask && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => handleDeleteChecklistItem(item.id)}
+                                                >
+                                                    <Trash className="h-4 w-4" />
+                                                </Button>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -563,6 +578,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                 value={newChecklistItem}
                                 onChange={(e) => setNewChecklistItem(e.target.value)}
                                 onKeyDown={handleAddChecklistItem}
+                                disabled={!canEditTask}
                             />
                         </div>
                         
@@ -586,34 +602,38 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                                     <Download className="h-4 w-4" />
                                                 </Link>
                                             </Button>
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100">
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>Delete Attachment?</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            Are you sure you want to delete "{attachment.name}"? This action cannot be undone.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction onClick={() => handleDeleteAttachment(attachment)}>Delete</AlertDialogAction>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
+                                            {canEditTask && (
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Delete Attachment?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Are you sure you want to delete "{attachment.name}"? This action cannot be undone.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleDeleteAttachment(attachment)}>Delete</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
                             </div>
                             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                                {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
-                                Upload a file
-                            </Button>
+                             {canEditTask && (
+                                <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                                    {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                                    Upload a file
+                                </Button>
+                             )}
                         </div>
 
 
@@ -643,47 +663,57 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                     </div>
                                 ))}
                             </div>
-                            <form onSubmit={handlePostComment} className="flex items-start gap-3">
-                                <Avatar className="h-8 w-8">
-                                    <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || ''} />
-                                    <AvatarFallback>{user?.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                                <div className='flex-1'>
-                                    <Input 
-                                        placeholder="Write a comment..."
-                                        value={newComment}
-                                        onChange={(e) => setNewComment(e.target.value)}
-                                        disabled={isPostingComment}
-                                    />
-                                     <Button type="submit" size="sm" className="mt-2" disabled={isPostingComment || !newComment.trim()}>
-                                        {isPostingComment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Save Comment
-                                    </Button>
-                                </div>
-                            </form>
+                            {!isViewer && (
+                                <form onSubmit={handlePostComment} className="flex items-start gap-3">
+                                    <Avatar className="h-8 w-8">
+                                        <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || ''} />
+                                        <AvatarFallback>{user?.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
+                                    </Avatar>
+                                    <div className='flex-1'>
+                                        <Input 
+                                            placeholder="Write a comment..."
+                                            value={newComment}
+                                            onChange={(e) => setNewComment(e.target.value)}
+                                            disabled={isPostingComment}
+                                        />
+                                        <Button type="submit" size="sm" className="mt-2" disabled={isPostingComment || !newComment.trim()}>
+                                            {isPostingComment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Save Comment
+                                        </Button>
+                                    </div>
+                                </form>
+                            )}
                         </div>
                     </div>
                 </div>
                 <SheetFooter className='border-t pt-4'>
-                     <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="destructive" className='mr-auto'>
-                                <Trash2 className="mr-2 h-4 w-4" /> Delete Task
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete this task and all of its attachments.
-                            </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDelete}>Continue</AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+                    {userRole === 'manager' && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" className='mr-auto'>
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete Task
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete this task and all of its attachments.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDelete}>Continue</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                     {!canEditTask && userRole === 'editor' && (
+                        <div className='mr-auto flex items-center gap-2 text-sm text-muted-foreground'>
+                            <Lock className='h-4 w-4' />
+                            <span>Assign this task to yourself to edit it.</span>
+                        </div>
+                     )}
                     <SheetClose asChild>
                         <Button>Close</Button>
                     </SheetClose>
