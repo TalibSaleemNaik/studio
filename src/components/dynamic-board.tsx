@@ -8,7 +8,7 @@ import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus, LayoutGrid,
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField, arrayUnion, arrayRemove, runTransaction, collectionGroup } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogTrigger, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -48,13 +48,13 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
         setIsInviting(true);
         try {
             // Get the workpanelId from the board itself to ensure it's correct
-            const boardRef = doc(db, `workspaces/${user?.uid}/boards`, boardId); // This path seems wrong, let's fix it later if needed. For now, let's find the workpanelId
-            const boardSnap = await getDoc(doc(db, "boards", boardId)); // This is also not right, boards are nested. This needs a rethink.
-            
-            // Let's assume we can get workpanelId somehow for the invite. The main issue is in remove.
-            // For now, let's pretend we have it. A more robust solution is needed.
-            const workpanelId = boardSnap.data()?.workpanelId; // FAKE, this won't work
-            if (!workpanelId) {
+            const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
+            const boardDocs = await getDocs(findBoardQuery);
+             if (boardDocs.empty) {
+                throw new Error("Could not find the specified board to determine workpanel.");
+            }
+            const boardWorkpanelId = boardDocs.docs[0].data()?.workpanelId;
+            if (!boardWorkpanelId) {
                 toast({ variant: 'destructive', title: 'Cannot invite: Workpanel ID is missing.' });
                  setIsInviting(false);
                  return;
@@ -82,7 +82,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
             }
             
             await runTransaction(db, async (transaction) => {
-                const boardTransactionRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+                const boardTransactionRef = doc(db, `workspaces/${boardWorkpanelId}/boards`, boardId);
                 const userDocRef = doc(db, `users`, userId);
 
                 transaction.update(boardTransactionRef, {
@@ -90,7 +90,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                     memberUids: arrayUnion(userId)
                 });
                  transaction.update(userDocRef, {
-                    accessibleWorkpanels: arrayUnion(workpanelId)
+                    accessibleWorkpanels: arrayUnion(boardWorkpanelId)
                 });
             });
             
@@ -100,7 +100,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workpanelId, boardId, simpleUser, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
+                await logActivity(boardWorkpanelId, boardId, simpleUser, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
             }
 
             toast({ title: 'User invited successfully!' });
@@ -122,16 +122,18 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
         }
 
         try {
-            // This is also problematic, as it needs the workpanelId.
-            // We'll focus on the removal logic which is the source of the crash.
-            const boardRefUnsafe = doc(db, `workspaces/DUMMY/boards`, boardId);
-            // This will fail, but the main point is fixing the crash.
-            // A proper fix would involve fetching the board doc first.
+            const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
+            const boardDocs = await getDocs(findBoardQuery);
+            if (boardDocs.empty) {
+                throw new Error("Could not find the specified board to determine workpanel.");
+            }
+            const boardWorkpanelId = boardDocs.docs[0].data()?.workpanelId;
+            const boardRef = doc(db, `workspaces/${boardWorkpanelId}/boards`, boardId);
             
-            // await updateDoc(boardRef, {
-            //     [`members.${memberId}`]: newRole
-            // });
-            toast({ title: 'Role changing needs to be fixed.' });
+            await updateDoc(boardRef, {
+                [`members.${memberId}`]: newRole
+            });
+            toast({ title: 'Member role updated.' });
         } catch (error) {
             console.error("Error updating role:", error);
             toast({ variant: 'destructive', title: 'Failed to update member role.' });
@@ -153,29 +155,13 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                 // --- READS FIRST ---
                 
                 // 1. Find the board document first to get its parent workpanelId.
-                // This is a collection group query because we don't know the workpanelId yet.
-                const boardsCollectionGroup = query(collectionGroup(db, 'boards'), where('__name__', '==', `workspaces/DUMMY/boards/${boardId}`.replace('DUMMY', boardId.split('__')[0]))); // This is a hack
-                 const boardQuery = query(collectionGroup(db, 'boards'), where(doc(db, 'boards', boardId).path, '==', true));
-                 
-                 // The above is too complex. The simplest way is to find the board by ID.
-                 // This requires a collection group query.
-                 const boardDocRef = doc(db, 'boards', boardId); // This path is wrong. It's nested.
-
-                // Let's assume we can get the board document.
-                const findBoardQuery = query(collectionGroup(db, 'boards'));
-                let boardDataSnap;
-                let currentBoardRef;
-
-                // This is inefficient, but will find the board. The real fix is better data structure.
-                const allBoards = await getDocs(findBoardQuery);
-                const boardDoc = allBoards.docs.find(d => d.id === boardId);
-
-                if (!boardDoc) {
+                const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
+                const boardDocs = await transaction.get(findBoardQuery);
+                if (boardDocs.empty) {
                     throw new Error("Could not find the specified board.");
                 }
-                currentBoardRef = boardDoc.ref;
-                boardDataSnap = await transaction.get(currentBoardRef);
-
+                const boardDataSnap = boardDocs.docs[0];
+                const currentBoardRef = boardDataSnap.ref;
                 const boardWorkpanelId = boardDataSnap.data()?.workpanelId;
 
                 if (!boardWorkpanelId) {
@@ -220,8 +206,10 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                // This will fail if boardWorkpanelId is not fetched, which it won't be reliably.
-                // await logActivity(boardWorkpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
+                const boardDocs = await getDocs(findBoardQuery);
+                const boardWorkpanelId = boardDocs.docs[0].data()?.workpanelId;
+                await logActivity(boardWorkpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
             }
 
             toast({ title: 'Member removed.' });
