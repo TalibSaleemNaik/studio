@@ -5,8 +5,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User, Lock, FolderPlus } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User, Lock, FolderPlus, Move } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy, updateDoc } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
@@ -215,7 +215,7 @@ function CreateBoardDialog({ workpanelId, folderId, onBoardCreated }: { workpane
     )
 }
 
-function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDelete }: { board: Board, workpanelId: string, boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void, canDelete: boolean }) {
+function BoardCard({ board, workpanelId, folders, boardMembers, openDeleteDialog, handleMoveBoard, canDelete }: { board: Board, workpanelId: string, folders: Folder[], boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void, handleMoveBoard: (boardId: string, newFolderId: string) => void, canDelete: boolean }) {
     const owner = boardMembers.find(m => m.uid === board.ownerId);
 
     return (
@@ -234,6 +234,19 @@ function BoardCard({ board, workpanelId, boardMembers, openDeleteDialog, canDele
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem>Edit</DropdownMenuItem>
+                             <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Move className="mr-2 h-4 w-4" />
+                                    <span>Move to</span>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                     {folders.filter(f => f.id !== board.folderId).map(folder => (
+                                         <DropdownMenuItem key={folder.id} onSelect={() => handleMoveBoard(board.id, folder.id)}>
+                                             {folder.name}
+                                         </DropdownMenuItem>
+                                     ))}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
                             <DropdownMenuItem>Archive</DropdownMenuItem>
                             {canDelete && (
                                 <DropdownMenuItem onSelect={() => openDeleteDialog(board)} className="text-destructive">
@@ -302,12 +315,18 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
 
         const workpanelRef = doc(db, `workspaces/${workpanelId}`);
         const unsubscribeWorkpanel = onSnapshot(workpanelRef, (workspaceSnap) => {
-            if (!workspaceSnap.exists() || !workspaceSnap.data()?.members?.[user.uid]) {
+            if (!workspaceSnap.exists()) {
                 setError("You do not have permission to view this workpanel.");
                 setLoading(false);
                 return;
             }
-            setWorkpanel(workspaceSnap.data() as Workpanel);
+            const workpanelData = workspaceSnap.data() as Workpanel;
+             if (!workpanelData?.members?.[user.uid]) {
+                setError("You are not a member of this workpanel.");
+                setLoading(false);
+                return;
+            }
+            setWorkpanel(workpanelData);
 
             // Fetch Folders
             const foldersQuery = query(collection(db, `workspaces/${workpanelId}/folders`), orderBy('createdAt'));
@@ -320,7 +339,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                 const unsubscribeBoards = onSnapshot(boardsQuery, async (boardsSnapshot) => {
                     const boardsData = boardsSnapshot.docs
                         .map(doc => ({ id: doc.id, ...doc.data() } as Board))
-                        .filter(board => !board.isPrivate || (board.members && board.members[user.uid]));
+                        .filter(board => !board.isPrivate || (board.members && user.uid && board.members[user.uid]));
                     
                     const newBoardsByFolder: {[key: string]: Board[]} = {};
                     foldersData.forEach(folder => {
@@ -401,6 +420,17 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             setBoardToDelete(null);
         }
     };
+    
+    const handleMoveBoard = async (boardId: string, newFolderId: string) => {
+        const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+        try {
+            await updateDoc(boardRef, { folderId: newFolderId });
+            toast({ title: "Board moved successfully!" });
+        } catch (error) {
+            console.error("Error moving board: ", error);
+            toast({ variant: 'destructive', title: 'Error moving board' });
+        }
+    };
 
 
     if (loading) {
@@ -432,8 +462,10 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                     key={board.id}
                     board={board}
                     workpanelId={workpanelId}
+                    folders={folders}
                     boardMembers={boardMembers}
                     openDeleteDialog={openDeleteDialog}
+                    handleMoveBoard={handleMoveBoard}
                     canDelete={canDelete}
                 />
             );
