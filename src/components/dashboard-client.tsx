@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User, Lock, FolderPlus, Move, GripVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -537,7 +537,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                             );
                         })}
                         {provided.placeholder}
-                        {canCreate && <CreateBoardDialog workpanelId={workpanelId} folderId={folderId} onBoardCreated={() => {}} />}
+                        {canCreate && <CreateBoardDialog workpanelId={workpanelId} folderId={folderId === 'unassigned' ? '' : folderId} onBoardCreated={() => {}} />}
                     </div>
                 )}
             </Droppable>
