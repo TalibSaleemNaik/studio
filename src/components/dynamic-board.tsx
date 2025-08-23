@@ -8,7 +8,7 @@ import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus, LayoutGrid,
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField, arrayUnion, arrayRemove, runTransaction, collectionGroup } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogTrigger, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -30,7 +30,7 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TableView } from './board/table-view';
 import { useSearchParams } from 'next/navigation';
 
-function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
+function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
@@ -47,14 +47,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
 
         setIsInviting(true);
         try {
-            // Get the workpanelId from the board itself to ensure it's correct
-            const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
-            const boardDocs = await getDocs(findBoardQuery);
-             if (boardDocs.empty) {
-                throw new Error("Could not find the specified board to determine workpanel.");
-            }
-            const boardWorkpanelId = boardDocs.docs[0].data()?.workpanelId;
-            if (!boardWorkpanelId) {
+             if (!workpanelId) {
                 toast({ variant: 'destructive', title: 'Cannot invite: Workpanel ID is missing.' });
                  setIsInviting(false);
                  return;
@@ -82,7 +75,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
             }
             
             await runTransaction(db, async (transaction) => {
-                const boardTransactionRef = doc(db, `workspaces/${boardWorkpanelId}/boards`, boardId);
+                const boardTransactionRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
                 const userDocRef = doc(db, `users`, userId);
 
                 transaction.update(boardTransactionRef, {
@@ -90,7 +83,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                     memberUids: arrayUnion(userId)
                 });
                  transaction.update(userDocRef, {
-                    accessibleWorkpanels: arrayUnion(boardWorkpanelId)
+                    accessibleWorkpanels: arrayUnion(workpanelId)
                 });
             });
             
@@ -100,7 +93,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(boardWorkpanelId, boardId, simpleUser, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
+                await logActivity(workpanelId, boardId, simpleUser, `invited ${userToInvite.displayName} (${userToInvite.email}) to the board.`);
             }
 
             toast({ title: 'User invited successfully!' });
@@ -122,13 +115,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
         }
 
         try {
-            const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
-            const boardDocs = await getDocs(findBoardQuery);
-            if (boardDocs.empty) {
-                throw new Error("Could not find the specified board to determine workpanel.");
-            }
-            const boardWorkpanelId = boardDocs.docs[0].data()?.workpanelId;
-            const boardRef = doc(db, `workspaces/${boardWorkpanelId}/boards`, boardId);
+            const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             
             await updateDoc(boardRef, {
                 [`members.${memberId}`]: newRole
@@ -153,37 +140,24 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
 
             await runTransaction(db, async (transaction) => {
                 // --- READS FIRST ---
-                
-                // 1. Find the board document first to get its parent workpanelId.
-                const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
-                const boardDocs = await transaction.get(findBoardQuery);
-                if (boardDocs.empty) {
-                    throw new Error("Could not find the specified board.");
-                }
-                const boardDataSnap = boardDocs.docs[0];
-                const currentBoardRef = boardDataSnap.ref;
-                const boardWorkpanelId = boardDataSnap.data()?.workpanelId;
-
-                if (!boardWorkpanelId) {
-                    throw new Error("Could not determine the workpanel for this board.");
-                }
-                
-                const userDocRef = doc(db, 'users', memberId);
-                const workpanelDoc = await transaction.get(doc(db, 'workspaces', boardWorkpanelId));
+                const currentBoardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
                 if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
-
-                // 2. Check for other access points
-                const boardsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+                
+                // 1. Check for other access points
+                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
                 const boardsSnap = await transaction.get(boardsQuery);
                 const otherBoardAccess = boardsSnap.docs.filter(d => d.id !== boardId).length > 0;
 
-                const teamRoomsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
                 const teamRoomsSnap = await transaction.get(teamRoomsQuery);
                 const teamRoomAccess = teamRoomsSnap.size > 0;
                 
                 const workpanelMemberAccess = !!workpanelDoc.data().members[memberId];
                 
                 const hasOtherAccess = otherBoardAccess || teamRoomAccess || workpanelMemberAccess;
+                
+                const userDocRef = doc(db, 'users', memberId);
 
                 // --- WRITES LAST ---
                 // 1. Remove user from board
@@ -195,7 +169,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                 // 2. If no other access found, remove from accessibleWorkpanels
                 if (!hasOtherAccess) {
                     transaction.update(userDocRef, {
-                        accessibleWorkpanels: arrayRemove(boardWorkpanelId)
+                        accessibleWorkpanels: arrayRemove(workpanelId)
                     });
                 }
             });
@@ -206,10 +180,7 @@ function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: stri
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                const findBoardQuery = query(collectionGroup(db, 'boards'), where('__name__', '==', doc(db, 'boards', boardId).path));
-                const boardDocs = await getDocs(findBoardQuery);
-                const boardWorkpanelId = boardDocs.docs[0].data()?.workpanelId;
-                await logActivity(boardWorkpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                await logActivity(workpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
             }
 
             toast({ title: 'Member removed.' });
@@ -761,7 +732,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                     <History className="mr-2 h-4 w-4" />
                     Activity
                 </Button>
-                <BoardMembersDialog boardId={boardId} boardMembers={boardMembers} userRole={userRole} />
+                <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} userRole={userRole} />
                  {activeView === 'kanban' && (
                     <CreateGroupDialog 
                         workpanelId={workpanelId}
