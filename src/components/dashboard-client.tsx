@@ -5,10 +5,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User, Lock, FolderPlus, Move } from "lucide-react";
+import { PlusCircle, MoreVertical, Loader2, AlertTriangle, Trash2, User, Lock, FolderPlus, Move, GripVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,8 @@ import { UserProfile, Board as BoardType, WorkpanelRole, Folder } from "./board/
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { Checkbox } from "./ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { cn } from "@/lib/utils";
 
 
 interface Board extends BoardType {
@@ -431,6 +433,50 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             toast({ variant: 'destructive', title: 'Error moving board' });
         }
     };
+    
+    const onDragEnd = (result: DropResult) => {
+        const { source, destination, draggableId } = result;
+
+        if (!destination) {
+            return;
+        }
+
+        const sourceFolderId = source.droppableId;
+        const destFolderId = destination.droppableId;
+
+        if (sourceFolderId === destFolderId) {
+            // Reordering within the same folder is not implemented yet.
+            return;
+        }
+
+        // Optimistically update UI
+        const sourceBoards = sourceFolderId === 'unassigned' ? [...unassignedBoards] : [...(boardsByFolder[sourceFolderId] || [])];
+        const [movedBoard] = sourceBoards.splice(source.index, 1);
+        
+        if (!movedBoard) return;
+
+        const newBoardsByFolder = { ...boardsByFolder };
+        if (sourceFolderId !== 'unassigned') {
+            newBoardsByFolder[sourceFolderId] = sourceBoards;
+        } else {
+            setUnassignedBoards(sourceBoards);
+        }
+
+        if (destFolderId !== 'unassigned') {
+            const destBoards = [...(newBoardsByFolder[destFolderId] || [])];
+            destBoards.splice(destination.index, 0, movedBoard);
+            newBoardsByFolder[destFolderId] = destBoards;
+        } else {
+            const newUnassigned = [...unassignedBoards];
+            newUnassigned.splice(destination.index, 0, movedBoard);
+            setUnassignedBoards(newUnassigned);
+        }
+
+        setBoardsByFolder(newBoardsByFolder);
+        
+        // Update Firestore
+        handleMoveBoard(draggableId, destFolderId === 'unassigned' ? '' : destFolderId);
+    };
 
 
     if (loading) {
@@ -450,30 +496,56 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
     const canCreate = currentUserRole === 'admin' || currentUserRole === 'manager';
 
-    const renderBoardGrid = (boards: Board[]) => {
-        return boards.map((board) => {
-            const boardMembers = Object.keys(board.members)
-                .map(uid => allUsers.get(uid))
-                .filter((u): u is UserProfile => !!u);
-            const canDelete = currentUserRole === 'admin' || (user?.uid === board.ownerId);
+    const renderBoardGrid = (boards: Board[], folderId: string) => {
+        return (
+            <Droppable droppableId={folderId} type="BOARD">
+                {(provided, snapshot) => (
+                    <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={cn(
+                            "grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 transition-colors duration-200 rounded-lg p-2",
+                            snapshot.isDraggingOver && "bg-primary/10"
+                        )}
+                    >
+                        {boards.map((board, index) => {
+                            const boardMembers = Object.keys(board.members)
+                                .map(uid => allUsers.get(uid))
+                                .filter((u): u is UserProfile => !!u);
+                            const canDelete = currentUserRole === 'admin' || (user?.uid === board.ownerId);
 
-            return (
-                <BoardCard
-                    key={board.id}
-                    board={board}
-                    workpanelId={workpanelId}
-                    folders={folders}
-                    boardMembers={boardMembers}
-                    openDeleteDialog={openDeleteDialog}
-                    handleMoveBoard={handleMoveBoard}
-                    canDelete={canDelete}
-                />
-            );
-        });
+                            return (
+                                <Draggable key={board.id} draggableId={board.id} index={index}>
+                                    {(provided) => (
+                                        <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            {...provided.dragHandleProps}
+                                        >
+                                            <BoardCard
+                                                board={board}
+                                                workpanelId={workpanelId}
+                                                folders={folders}
+                                                boardMembers={boardMembers}
+                                                openDeleteDialog={openDeleteDialog}
+                                                handleMoveBoard={handleMoveBoard}
+                                                canDelete={canDelete}
+                                            />
+                                        </div>
+                                    )}
+                                </Draggable>
+                            );
+                        })}
+                        {provided.placeholder}
+                        {canCreate && <CreateBoardDialog workpanelId={workpanelId} folderId={folderId} onBoardCreated={() => {}} />}
+                    </div>
+                )}
+            </Droppable>
+        );
     };
 
     return (
-        <>
+        <DragDropContext onDragEnd={onDragEnd}>
             {canCreate && (
                 <div className="mb-8">
                      <CreateFolderDialog workpanelId={workpanelId} onFolderCreated={() => {}} />
@@ -485,22 +557,17 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                          <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline -ml-4 px-4 py-2 rounded-md hover:bg-muted">
                             {folder.name}
                         </AccordionTrigger>
-                        <AccordionContent className="pt-4">
-                             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                                {renderBoardGrid(boardsByFolder[folder.id] || [])}
-                                {canCreate && <CreateBoardDialog workpanelId={workpanelId} folderId={folder.id} onBoardCreated={() => {}} />}
-                            </div>
+                        <AccordionContent className="pt-4 -ml-2">
+                             {renderBoardGrid(boardsByFolder[folder.id] || [], folder.id)}
                         </AccordionContent>
                     </AccordionItem>
                 ))}
             </Accordion>
            
-            {unassignedBoards.length > 0 && (
+            {(unassignedBoards.length > 0 || folders.length === 0) && (
                 <div className="mt-8">
                     <h2 className="text-xl font-headline font-semibold mb-4">Uncategorized Boards</h2>
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {renderBoardGrid(unassignedBoards)}
-                    </div>
+                    {renderBoardGrid(unassignedBoards, 'unassigned')}
                 </div>
             )}
             
@@ -523,6 +590,8 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </>
+        </DragDropContext>
     )
 }
+
+    
