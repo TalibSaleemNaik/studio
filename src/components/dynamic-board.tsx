@@ -19,7 +19,7 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Checkbox } from './ui/checkbox';
-import { Task, Columns, BoardMember, Board as BoardType } from './board/types';
+import { Task, Columns, BoardMember, Board as BoardType, Folder as FolderType } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
@@ -282,10 +282,36 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         }
 
         const boardData = boardSnap.data() as BoardType;
-        const memberUIDs = Object.keys(boardData.members || {});
-        
-        // A user has permission if the board is NOT private, OR if it IS private and they are a member.
-        const hasPermission = !boardData.isPrivate || memberUIDs.includes(user.uid);
+
+        // Check permissions
+        const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+        const workpanelSnap = await getDoc(workpanelRef);
+        if (!workpanelSnap.exists()) {
+             setError("Workpanel not found.");
+             setLoading(false);
+             return;
+        }
+        const workpanelData = workpanelSnap.data();
+        const userWorkpanelRole = workpanelData?.members[user.uid];
+
+        let hasFolderAccess = false;
+        if(boardData.folderId){
+            const folderRef = doc(db, `workspaces/${workpanelId}/folders/${boardData.folderId}`);
+            const folderSnap = await getDoc(folderRef);
+            if(folderSnap.exists()){
+                const folderData = folderSnap.data() as FolderType;
+                if(folderData.members && folderData.members[user.uid]){
+                    hasFolderAccess = true;
+                }
+            }
+        }
+
+        const hasPermission = !boardData.isPrivate || 
+                              boardData.members[user.uid] || 
+                              userWorkpanelRole === 'admin' ||
+                              userWorkpanelRole === 'manager' ||
+                              hasFolderAccess;
+
 
         if (!hasPermission) {
             setError("You do not have permission to view this board.");
@@ -296,6 +322,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         setBoard({ id: boardSnap.id, ...boardData });
         setError(null);
 
+        const memberUIDs = Object.keys(boardData.members || {});
         try {
             if (memberUIDs.length > 0) {
                  const userDocs = await Promise.all(memberUIDs.map(uid => getDoc(doc(db, 'users', uid))));

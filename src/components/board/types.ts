@@ -49,6 +49,8 @@ export interface UserProfile {
 
 export type WorkpanelRole = 'admin' | 'manager' | 'member';
 export type BoardRole = 'owner' | 'editor' | 'viewer';
+export type FolderRole = 'editor' | 'viewer';
+
 
 export interface WorkpanelMember {
     uid: string;
@@ -64,6 +66,7 @@ export interface Folder {
     name: string;
     workpanelId: string;
     createdAt: any;
+    members?: { [key: string]: FolderRole };
 }
 
 export interface Board {
