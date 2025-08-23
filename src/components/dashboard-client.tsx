@@ -8,6 +8,7 @@ import { Loader2, AlertTriangle, GripVertical } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, query, onSnapshot, doc, writeBatch, where, getDocs, orderBy, updateDoc, deleteField, collectionGroup } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "./ui/skeleton";
 import { UserProfile, Board as BoardType, WorkpanelRole, TeamRoom as TeamRoomType } from "./board/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
@@ -92,15 +93,15 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         return visibleBoards.filter(board => !board.teamRoomId);
     }, [visibleBoards]);
     
-    const fetchAllUsers = useCallback(async (currentWorkpanel: Workpanel, currentTeamRooms: TeamRoom[], currentBoards: Board[]) => {
-        if (!currentWorkpanel) return;
-        const memberIds = new Set<string>(Object.keys(currentWorkpanel.members));
+    const fetchAllUsers = useCallback(async () => {
+        if (!workpanel) return;
+        const memberIds = new Set<string>(Object.keys(workpanel.members));
 
-        currentTeamRooms.forEach(room => {
+        teamRooms.forEach(room => {
             Object.keys(room.members || {}).forEach(uid => memberIds.add(uid));
         });
 
-        currentBoards.forEach(board => {
+        boards.forEach(board => {
             Object.keys(board.members || {}).forEach(uid => memberIds.add(uid));
         });
         
@@ -114,7 +115,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             });
             setAllUsers(new Map(newAllUsers));
         }
-    }, []);
+    }, [workpanel, teamRooms, boards]);
 
     useEffect(() => {
         if (!user) {
@@ -141,7 +142,6 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                  const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
                      const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
                      setBoards(boardsData);
-                     fetchAllUsers(workpanelData, teamRoomsData, boardsData);
                      setLoading(false);
                      setError(null);
                  }, (err) => {
@@ -167,9 +167,14 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         });
         
         return () => unsubscribeWorkpanel();
-    }, [user, workpanelId, fetchAllUsers]);
-    
+    }, [user, workpanelId]);
 
+    useEffect(() => {
+        if (workpanel && teamRooms && boards) {
+            fetchAllUsers();
+        }
+    }, [workpanel, teamRooms, boards, fetchAllUsers]);
+    
     const openDeleteDialog = (board: Board) => {
         setBoardToDelete(board);
         setIsDeleteDialogOpen(true);
@@ -307,7 +312,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                 <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
                                 <span>{teamRoom.name}</span>
                                 </AccordionTrigger>
-                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={() => workpanel && fetchAllUsers(workpanel, teamRooms, boards)} />
+                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={fetchAllUsers} />
                             </div>
                             <AccordionContent className="pt-4 px-2">
                                 {renderBoardGrid(visibleBoardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
@@ -346,3 +351,5 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
+
+    
