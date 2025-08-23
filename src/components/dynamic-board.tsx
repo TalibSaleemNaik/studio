@@ -307,12 +307,11 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         }
 
         const canViewViaWorkpanel = ['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole);
+        const hasDirectAccess = boardData.members && boardData.members[user.uid];
 
-        const hasPermission = !boardData.isPrivate || 
-                              (boardData.members && boardData.members[user.uid]) ||
-                              canViewViaWorkpanel ||
-                              hasTeamRoomAccess;
-
+        const hasPermission = !boardData.isPrivate 
+                                ? (canViewViaWorkpanel || hasTeamRoomAccess)
+                                : hasDirectAccess;
 
         if (!hasPermission) {
             setError("You do not have permission to view this board.");

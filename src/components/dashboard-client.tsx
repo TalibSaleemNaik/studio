@@ -510,10 +510,20 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                         .filter(board => {
                             const teamRoom = teamRoomsData.find(f => f.id === board.teamRoomId);
                             const hasTeamRoomAccess = teamRoom && teamRoom.members && user.uid && teamRoom.members[user.uid];
+                            const canViewViaWorkpanel = ['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole);
 
-                            if (userWorkpanelRole === 'owner' || userWorkpanelRole === 'admin' || userWorkpanelRole === 'member' || userWorkpanelRole === 'viewer') return true;
-                            if (hasTeamRoomAccess) return true;
-                            if (board.members && user.uid && board.members[user.uid]) return true; // Direct board member
+                            if (!board.isPrivate && (canViewViaWorkpanel || hasTeamRoomAccess)) {
+                                return true;
+                            }
+                            
+                            if (board.isPrivate && board.members && user.uid && board.members[user.uid]) {
+                                return true;
+                            }
+                           
+                            if (userWorkpanelRole === 'owner' || userWorkpanelRole === 'admin') {
+                                return true;
+                            }
+                            
                             return false;
                         });
                     setBoards(boardsData);
