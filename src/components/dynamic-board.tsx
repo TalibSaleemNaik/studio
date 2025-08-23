@@ -27,10 +27,10 @@ import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
-import { TableView } from './board/table-view';
+import { TableView } from './table-view';
 import { useSearchParams } from 'next/navigation';
 
-function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
+function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId?: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
@@ -43,6 +43,10 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
         if (!trimmedEmail) {
             toast({ variant: 'destructive', title: 'Please enter an email address.' });
             return;
+        }
+        if (!workpanelId) {
+             toast({ variant: 'destructive', title: 'Cannot invite: Workpanel ID is missing.' });
+             return;
         }
         setIsInviting(true);
         try {
@@ -105,6 +109,10 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
             toast({variant: 'destructive', title: 'You cannot change your own role.'});
             return;
         }
+         if (!workpanelId) {
+             toast({ variant: 'destructive', title: 'Cannot change role: Workpanel ID is missing.' });
+             return;
+        }
 
         try {
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
@@ -128,34 +136,33 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
         try {
             const memberToRemove = boardMembers.find(m => m.uid === memberId);
             if (!memberToRemove) throw new Error("Member not found");
-            
-            const boardDataSnap = await getDoc(doc(db, `workspaces/${workpanelId}/boards`, boardId));
-            const boardWorkpanelId = boardDataSnap.data()?.workpanelId;
-            
-            if(!boardWorkpanelId) {
-                 toast({ variant: 'destructive', title: 'Could not identify the workpanel for this board.'});
-                 return;
-            }
 
             await runTransaction(db, async (transaction) => {
+                // --- READS FIRST ---
+                
+                // 1. Get the board document to find its parent workpanelId.
+                const preadBoardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+                const boardDataSnap = await transaction.get(preadBoardRef);
+                const boardWorkpanelId = boardDataSnap.data()?.workpanelId;
+
+                if (!boardWorkpanelId) {
+                    throw new Error("Could not determine the workpanel for this board.");
+                }
+                
                 const boardRef = doc(db, `workspaces/${boardWorkpanelId}/boards`, boardId);
                 const userDocRef = doc(db, 'users', memberId);
-
-                // --- READS FIRST ---
                 const workpanelDoc = await transaction.get(doc(db, 'workspaces', boardWorkpanelId));
                 if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
 
-                // Check other boards
+                // 2. Check for other access points
                 const boardsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/boards`), where('memberUids', 'array-contains', memberId));
                 const boardsSnap = await transaction.get(boardsQuery);
                 const otherBoardAccess = boardsSnap.docs.filter(d => d.id !== boardId).length > 0;
 
-                // Check teamrooms
                 const teamRoomsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
                 const teamRoomsSnap = await transaction.get(teamRoomsQuery);
                 const teamRoomAccess = teamRoomsSnap.size > 0;
                 
-                // Check if user is a direct workpanel member
                 const workpanelMemberAccess = !!workpanelDoc.data().members[memberId];
                 
                 const hasOtherAccess = otherBoardAccess || teamRoomAccess || workpanelMemberAccess;
@@ -175,13 +182,13 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 }
             });
 
-            if (user && memberToRemove) {
+            if (user && memberToRemove && workpanelId) {
                 const simpleUser: SimpleUser = {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(boardWorkpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                await logActivity(workpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
             }
 
             toast({ title: 'Member removed.' });
@@ -838,5 +845,7 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
 
     
