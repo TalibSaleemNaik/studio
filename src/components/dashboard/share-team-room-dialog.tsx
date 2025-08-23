@@ -30,15 +30,10 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
     const { user } = useAuth();
     const teamRoomMembers = teamRoom.members || {};
     
-    // Determine which users to display in the list
     const displayedUserUids = React.useMemo(() => {
-        const uids = new Set<string>();
-        // Add direct teamroom members
-        Object.keys(teamRoom.members || {}).forEach(uid => uids.add(uid));
-        // Add workpanel members who have implicit access
-        Object.keys(workpanelMembers || {}).forEach(uid => uids.add(uid));
-        return Array.from(uids);
-    }, [teamRoom.members, workpanelMembers]);
+        // Only show users who are direct members of the team room.
+        return Object.keys(teamRoom.members || {});
+    }, [teamRoom.members]);
 
 
     const handleInvite = async () => {
@@ -151,7 +146,6 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
         }
     };
     
-    // Function to calculate the effective role for a user in this teamroom
     const getEffectiveRole = (uid: string): TeamRoomRole | null => {
         const directRole = teamRoomMembers[uid];
         if (directRole) return directRole;
