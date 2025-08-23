@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React from 'react';
@@ -121,8 +120,8 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
     
     const handleRemoveMember = async (memberId: string) => {
         const isSelf = user?.uid === memberId;
-         if (isSelf) {
-            toast({variant: 'destructive', title: 'You cannot remove yourself.'});
+        if (isSelf) {
+            toast({ variant: 'destructive', title: 'You cannot remove yourself.' });
             return;
         }
 
@@ -134,53 +133,55 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
                 const userDocRef = doc(db, 'users', memberId);
 
-                // Remove user from board
+                // --- READS FIRST ---
+                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
+                if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
+
+                // Check other boards
+                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+                const boardsSnap = await transaction.get(boardsQuery);
+                const otherBoardAccess = boardsSnap.docs.filter(d => d.id !== boardId).length > 0;
+
+                // Check teamrooms
+                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+                const teamRoomsSnap = await transaction.get(teamRoomsQuery);
+                const teamRoomAccess = teamRoomsSnap.size > 0;
+                
+                // Check if user is a direct workpanel member
+                const workpanelMemberAccess = !!workpanelDoc.data().members[memberId];
+                
+                const hasOtherAccess = otherBoardAccess || teamRoomAccess || workpanelMemberAccess;
+
+                // --- WRITES LAST ---
+                // 1. Remove user from board
                 transaction.update(boardRef, {
                     [`members.${memberId}`]: deleteField(),
                     memberUids: arrayRemove(memberId)
                 });
 
-                // Check if user has any other access to this workpanel
-                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
-                if (workpanelDoc.exists() && workpanelDoc.data().members[memberId]) {
-                    return; // User is a workpanel member, so don't remove access
+                // 2. If no other access found, remove from accessibleWorkpanels
+                if (!hasOtherAccess) {
+                    transaction.update(userDocRef, {
+                        accessibleWorkpanels: arrayRemove(workpanelId)
+                    });
                 }
-
-                // Check other teamrooms
-                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
-                const teamRoomsSnap = await getDocs(teamRoomsQuery);
-                 if (teamRoomsSnap.size > 0) {
-                     return; // User has access via another teamroom
-                 }
-
-                // Check other boards, excluding the current one
-                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
-                const boardsSnap = await getDocs(boardsQuery);
-                 if (boardsSnap.docs.filter(d => d.id !== boardId).length > 0) {
-                     return; // User has access via another board
-                 }
-                
-                // If no other access found, remove from accessibleWorkpanels
-                transaction.update(userDocRef, {
-                    accessibleWorkpanels: arrayRemove(workpanelId)
-                });
             });
 
             if (user && memberToRemove) {
-                 const simpleUser: SimpleUser = {
+                const simpleUser: SimpleUser = {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                 await logActivity(workpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                await logActivity(workpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
             }
 
-             toast({ title: 'Member removed.' });
+            toast({ title: 'Member removed.' });
         } catch (error) {
             console.error("Error removing member:", error);
-            toast({ variant: 'destructive', title: 'Failed to remove member.' });
+            toast({ variant: 'destructive', title: 'Failed to remove member.', description: (error as Error).message });
         }
-    }
+    };
 
 
     return (
