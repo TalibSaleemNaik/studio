@@ -59,6 +59,13 @@ export interface BoardMember extends UserProfile {
   role: BoardRole;
 }
 
+export interface Folder {
+    id: string;
+    name: string;
+    workpanelId: string;
+    createdAt: any;
+}
+
 export interface Board {
     id: string;
     name: string;
@@ -66,6 +73,7 @@ export interface Board {
     ownerId: string;
     members: { [key: string]: BoardRole };
     isPrivate?: boolean;
+    folderId?: string;
 }
 
 export interface Comment {
@@ -94,5 +102,3 @@ export interface Notification {
   read: boolean;
   createdAt: any; // Firestore Timestamp
 }
-
-    
