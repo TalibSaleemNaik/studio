@@ -540,6 +540,9 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                             setError(null);
                         });
                         return () => unsubscribeBoards();
+                    }, (err) => {
+                         console.error("Error fetching team rooms:", err);
+                         setError("Failed to load team rooms.");
                     });
                     return () => unsubscribeTeamRooms();
                 }, (err) => {
