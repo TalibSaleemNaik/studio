@@ -95,18 +95,25 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     
     const fetchAllUsers = useCallback(async () => {
         if (!workpanel) return;
-        const memberIds = new Set<string>(Object.keys(workpanel.members));
+        const memberIds = new Set<string>();
 
+        // Add all direct workpanel members
+        Object.keys(workpanel.members || {}).forEach(uid => memberIds.add(uid));
+
+        // Add all members from all teamrooms in the current workpanel
         teamRooms.forEach(room => {
             Object.keys(room.members || {}).forEach(uid => memberIds.add(uid));
         });
 
+        // Add all members from all boards in the current workpanel
         boards.forEach(board => {
             Object.keys(board.members || {}).forEach(uid => memberIds.add(uid));
         });
         
         if (memberIds.size > 0) {
-            const userDocs = await getDocs(query(collection(db, 'users'), where('__name__', 'in', Array.from(memberIds).slice(0,30))));
+            // Firestore 'in' query is limited to 30 items in its array.
+            const uidsToFetch = Array.from(memberIds).slice(0, 30);
+            const userDocs = await getDocs(query(collection(db, 'users'), where('__name__', 'in', uidsToFetch)));
             const newAllUsers = new Map<string, UserProfile>();
             userDocs.forEach(userDoc => {
                 if (userDoc.exists()) {
@@ -312,7 +319,13 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                 <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
                                 <span>{teamRoom.name}</span>
                                 </AccordionTrigger>
-                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={fetchAllUsers} />
+                                <ShareTeamRoomDialog 
+                                    workpanelId={workpanelId} 
+                                    teamRoom={teamRoom} 
+                                    allUsers={allUsers} 
+                                    workpanelMembers={workpanel?.members || {}}
+                                    onUpdate={fetchAllUsers} 
+                                />
                             </div>
                             <AccordionContent className="pt-4 px-2">
                                 {renderBoardGrid(visibleBoardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
@@ -351,5 +364,3 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
-
-    

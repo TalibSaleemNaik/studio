@@ -10,25 +10,36 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { db } from "@/lib/firebase";
-import { collection, doc, query, where, getDocs, updateDoc, deleteField, runTransaction, arrayUnion, arrayRemove } from "firebase/firestore";
+import { collection, doc, query, where, getDocs, updateDoc, deleteField, runTransaction, arrayUnion, arrayRemove, getDoc } from "firebase/firestore";
 import { Loader2, Trash2, Share2 } from "lucide-react";
-import type { UserProfile, TeamRoom, TeamRoomRole } from "@/components/board/types";
+import type { UserProfile, TeamRoom, TeamRoomRole, WorkpanelRole } from "@/components/board/types";
 
 interface ShareTeamRoomDialogProps {
     workpanelId: string;
     teamRoom: TeamRoom;
     allUsers: Map<string, UserProfile>;
+    workpanelMembers: { [key: string]: WorkpanelRole };
     onUpdate: () => void;
 }
 
-export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: ShareTeamRoomDialogProps) {
+export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanelMembers, onUpdate }: ShareTeamRoomDialogProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
     const [isInviting, setIsInviting] = useState(false);
     const { toast } = useToast();
-    const teamRoomMembers = teamRoom.members || {};
-    const teamRoomMemberUids = Object.keys(teamRoomMembers);
     const { user } = useAuth();
+    const teamRoomMembers = teamRoom.members || {};
+    
+    // Determine which users to display in the list
+    const displayedUserUids = React.useMemo(() => {
+        const uids = new Set<string>();
+        // Add direct teamroom members
+        Object.keys(teamRoom.members || {}).forEach(uid => uids.add(uid));
+        // Add workpanel members who have implicit access
+        Object.keys(workpanelMembers || {}).forEach(uid => uids.add(uid));
+        return Array.from(uids);
+    }, [teamRoom.members, workpanelMembers]);
+
 
     const handleInvite = async () => {
         const trimmedEmail = inviteEmail.trim().toLowerCase();
@@ -48,8 +59,8 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate 
             const userToInviteDoc = querySnapshot.docs[0];
             const userToInviteId = userToInviteDoc.id;
 
-            if (teamRoomMemberUids.includes(userToInviteId)) {
-                throw new Error("User is already a member of this TeamRoom.");
+            if (Object.keys(teamRoomMembers).includes(userToInviteId)) {
+                throw new Error("User is already a direct member of this TeamRoom.");
             }
 
             await runTransaction(db, async (transaction) => {
@@ -97,6 +108,9 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate 
             return;
         }
 
+        const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
+        const userDocRef = doc(db, 'users', memberId);
+
         try {
             const otherBoardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
             const otherTeamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
@@ -111,9 +125,7 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate 
             
             await runTransaction(db, async (transaction) => {
                 const workpanelDocRef = doc(db, 'workspaces', workpanelId);
-                const userDocRef = doc(db, 'users', memberId);
-                const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
-
+                
                 const workpanelDoc = await transaction.get(workpanelDocRef);
                 if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
 
@@ -138,6 +150,21 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate 
             toast({ variant: 'destructive', title: 'Failed to remove member', description: error.message });
         }
     };
+    
+    // Function to calculate the effective role for a user in this teamroom
+    const getEffectiveRole = (uid: string): TeamRoomRole | 'Inherited' => {
+        const directRole = teamRoomMembers[uid];
+        if (directRole) return directRole;
+
+        const workpanelRole = workpanelMembers[uid];
+        if (workpanelRole) {
+            if (workpanelRole === 'owner' || workpanelRole === 'admin') return 'manager';
+            if (workpanelRole === 'member') return 'editor';
+            if (workpanelRole === 'viewer') return 'viewer';
+        }
+        return 'Inherited'; // Should not happen with current logic, but as a fallback.
+    }
+
 
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -167,9 +194,12 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate 
                     </div>
                     <div className="space-y-2">
                         <h4 className="font-medium">People with access</h4>
-                        {teamRoomMemberUids.map(uid => {
+                        {displayedUserUids.map(uid => {
                             const member = allUsers.get(uid);
                             const isCurrentUser = user?.uid === uid;
+                            const effectiveRole = getEffectiveRole(uid);
+                            const isInherited = !teamRoomMembers[uid] && workpanelMembers[uid];
+
                             return member ? (
                                 <div key={uid} className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -183,28 +213,34 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate 
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <Select
-                                            value={teamRoomMembers[uid]}
-                                            onValueChange={(value) => handleRoleChange(uid, value as TeamRoomRole)}
-                                            disabled={isCurrentUser}
-                                        >
-                                            <SelectTrigger className="w-[110px]">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="manager">Manager</SelectItem>
-                                                <SelectItem value="editor">Editor</SelectItem>
-                                                <SelectItem value="viewer">Viewer</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(uid)} disabled={isCurrentUser}>
+                                        {isInherited ? (
+                                             <div className="text-sm text-muted-foreground pr-2 w-[110px] text-right">
+                                                Inherited
+                                            </div>
+                                        ) : (
+                                            <Select
+                                                value={effectiveRole}
+                                                onValueChange={(value) => handleRoleChange(uid, value as TeamRoomRole)}
+                                                disabled={isCurrentUser}
+                                            >
+                                                <SelectTrigger className="w-[110px]">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="manager">Manager</SelectItem>
+                                                    <SelectItem value="editor">Editor</SelectItem>
+                                                    <SelectItem value="viewer">Viewer</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(uid)} disabled={isCurrentUser || isInherited}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
                                 </div>
                             ) : null;
                         })}
-                         {teamRoomMemberUids.length === 0 && <p className="text-sm text-muted-foreground">Only you have access to this TeamRoom.</p>}
+                         {displayedUserUids.length === 0 && <p className="text-sm text-muted-foreground">Only you have access to this TeamRoom.</p>}
                     </div>
                 </div>
             </DialogContent>
