@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -116,38 +117,39 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
             toast({ variant: 'destructive', title: 'You cannot remove yourself.' });
             return;
         }
-        try {
-            await runTransaction(db, async (transaction) => {
-                const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
-                const userDocRef = doc(db, 'users', memberId);
 
-                // --- READS FIRST ---
-                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
+        try {
+            // --- PRE-FLIGHT QUERIES (outside transaction) ---
+            const otherBoardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+            const otherTeamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+
+            const [otherBoardsSnap, otherTeamRoomsSnap] = await Promise.all([
+                getDocs(otherBoardsQuery),
+                getDocs(otherTeamRoomsQuery),
+            ]);
+
+            const otherBoardAccess = otherBoardsSnap.size > 0;
+            const otherTeamRoomAccess = otherTeamRoomsSnap.docs.filter(d => d.id !== teamRoom.id).length > 0;
+            
+            // --- ATOMIC TRANSACTION (only reads and writes) ---
+            await runTransaction(db, async (transaction) => {
+                const workpanelDocRef = doc(db, 'workspaces', workpanelId);
+                const userDocRef = doc(db, 'users', memberId);
+                const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
+
+                const workpanelDoc = await transaction.get(workpanelDocRef);
                 if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
 
-                // Check other boards
-                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
-                const boardsSnap = await transaction.get(boardsQuery);
-                const otherBoardAccess = boardsSnap.docs.length > 0;
-
-                // Check other teamrooms
-                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
-                const teamRoomsSnap = await transaction.get(teamRoomsQuery);
-                const otherTeamRoomAccess = teamRoomsSnap.docs.filter(d => d.id !== teamRoom.id).length > 0;
-                
-                // Check if user is a direct workpanel member
                 const workpanelMemberAccess = !!workpanelDoc.data().members[memberId];
-
                 const hasOtherAccess = otherBoardAccess || otherTeamRoomAccess || workpanelMemberAccess;
 
-                // --- WRITES LAST ---
-                // 1. Remove user from teamroom
+                // 1. Remove user from the current TeamRoom
                 transaction.update(teamRoomRef, {
                     [`members.${memberId}`]: deleteField(),
                     memberUids: arrayRemove(memberId)
                 });
 
-                // 2. If no other access found, remove from accessibleWorkpanels
+                // 2. If this was their last point of access, remove them from the workpanel's accessible list
                 if (!hasOtherAccess) {
                     transaction.update(userDocRef, {
                         accessibleWorkpanels: arrayRemove(workpanelId)
@@ -156,7 +158,7 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
             });
 
             toast({ title: "Member removed from TeamRoom." });
-            onUpdate();
+            onUpdate(); // Refresh the UI
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Failed to remove member', description: error.message });
         }
@@ -587,7 +589,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                     newAllUsers.set(userDoc.id, userDoc.data() as UserProfile);
                 }
             });
-            setAllUsers(newAllUsers);
+            setAllUsers(new Map(newAllUsers));
         }
     }, []);
 
