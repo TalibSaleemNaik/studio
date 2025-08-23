@@ -491,31 +491,29 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             return;
         }
 
+        // This effect will fetch all data needed for the dashboard based on the user's permissions.
         const fetchAllAccessibleData = async () => {
             setLoading(true);
             setError(null);
             try {
-                // 1. Get the current user's document to find accessible workpanels
+                // Fetch the user's document to get the list of accessible workpanels
                 const userDocRef = doc(db, 'users', user.uid);
                 const userDocSnap = await getDoc(userDocRef);
+
                 if (!userDocSnap.exists()) {
                     throw new Error("User profile not found.");
                 }
                 const userData = userDocSnap.data() as UserProfile;
-                const accessibleWorkpanels = new Set(userData.accessibleWorkpanels || []);
 
-                // 2. Add workpanels where user is a direct member
-                const directWorkpanelsQuery = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['owner', 'admin', 'member', 'viewer']));
-                const directWorkpanelsSnapshot = await getDocs(directWorkpanelsQuery);
-                directWorkpanelsSnapshot.forEach(doc => accessibleWorkpanels.add(doc.id));
-                
-                if (!accessibleWorkpanels.has(workpanelId)) {
+                // Ensure the current workpanel is accessible
+                const accessibleWorkpanels = new Set(userData.accessibleWorkpanels || []);
+                 if (!accessibleWorkpanels.has(workpanelId)) {
                      setError("You do not have permission to view this workpanel.");
                      setLoading(false);
                      return;
                 }
                 
-                // 3. Subscribe to the current workpanel and its contents
+                // Now, subscribe to the current workpanel and its contents
                 const workpanelRef = doc(db, `workspaces/${workpanelId}`);
                 const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
                     if (!workspaceSnap.exists()) {
@@ -526,6 +524,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                     const workpanelData = { id: workspaceSnap.id, ...workspaceSnap.data() } as Workpanel;
                     setWorkpanel(workpanelData);
                     
+                    // Fetch all users in this workpanel for displaying avatars and names
                     const memberIds = Object.keys(workpanelData.members);
                     if (memberIds.length > 0) {
                          const userDocs = await Promise.all(memberIds.map(uid => getDoc(doc(db, 'users', uid))));
@@ -544,6 +543,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                         const teamRoomsData = teamRoomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom));
                         setTeamRooms(teamRoomsData);
 
+                        // Boards query
                         const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
                         const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
                             const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
@@ -580,22 +580,42 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
 
     }, [user, workpanelId]);
     
-    const boardsByTeamRoom = React.useMemo(() => {
+    // Filter rooms and boards based on user's direct or inherited permissions
+    const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
+    const visibleTeamRooms = teamRooms.filter(teamRoom => {
+        if (!user) return false;
+        if (currentUserRole && ['owner', 'admin', 'member', 'viewer'].includes(currentUserRole)) return true;
+        return teamRoom.members && teamRoom.members[user.uid];
+    });
+
+    const visibleBoards = boards.filter(board => {
+        if (!user) return false;
+        if (currentUserRole && ['owner', 'admin', 'member', 'viewer'].includes(currentUserRole) && !board.isPrivate) return true;
+        if (currentUserRole && ['owner', 'admin'].includes(currentUserRole)) return true;
+        if (board.members && board.members[user.uid]) return true;
+
+        const parentRoom = teamRooms.find(r => r.id === board.teamRoomId);
+        if (parentRoom && parentRoom.members && parentRoom.members[user.uid]) return true;
+        
+        return false;
+    });
+
+    const visibleBoardsByTeamRoom = React.useMemo(() => {
         const grouped: {[key: string]: Board[]} = {};
-        teamRooms.forEach(teamRoom => {
+        visibleTeamRooms.forEach(teamRoom => {
             grouped[teamRoom.id] = [];
         });
-        boards.forEach(board => {
-            if (board.teamRoomId && grouped[board.teamRoomId]) {
+        visibleBoards.forEach(board => {
+            if (board.teamRoomId && grouped[board.teamRoomId] !== undefined) {
                 grouped[board.teamRoomId].push(board);
             }
         });
         return grouped;
-    }, [teamRooms, boards]);
-    
-    const unassignedBoards = React.useMemo(() => {
-        return boards.filter(board => !board.teamRoomId);
-    }, [boards]);
+    }, [visibleTeamRooms, visibleBoards]);
+
+    const visibleUnassignedBoards = React.useMemo(() => {
+        return visibleBoards.filter(board => !board.teamRoomId);
+    }, [visibleBoards]);
 
 
     const openDeleteDialog = (board: Board) => {
@@ -670,7 +690,6 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         )
     }
 
-    const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
     const canCreate = currentUserRole === 'admin' || currentUserRole === 'owner' || currentUserRole === 'member';
 
     const renderBoardGrid = (boardsToRender: Board[], teamRoomId: string, canCreateBoardsInRoom: boolean) => {
@@ -720,43 +739,6 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             </Droppable>
         );
     };
-    
-    // Filter rooms and boards based on user's direct or inherited permissions
-    const visibleTeamRooms = teamRooms.filter(teamRoom => {
-        if (!user) return false;
-        if (currentUserRole && ['owner', 'admin', 'member', 'viewer'].includes(currentUserRole)) return true;
-        return teamRoom.members && teamRoom.members[user.uid];
-    });
-
-    const visibleBoards = boards.filter(board => {
-        if (!user) return false;
-        if (currentUserRole && ['owner', 'admin', 'member', 'viewer'].includes(currentUserRole) && !board.isPrivate) return true;
-        if (currentUserRole && ['owner', 'admin'].includes(currentUserRole)) return true;
-        if (board.members && board.members[user.uid]) return true;
-
-        const parentRoom = teamRooms.find(r => r.id === board.teamRoomId);
-        if (parentRoom && parentRoom.members && parentRoom.members[user.uid]) return true;
-        
-        return false;
-    });
-
-    const visibleBoardsByTeamRoom = React.useMemo(() => {
-        const grouped: {[key: string]: Board[]} = {};
-        visibleTeamRooms.forEach(teamRoom => {
-            grouped[teamRoom.id] = [];
-        });
-        visibleBoards.forEach(board => {
-            if (board.teamRoomId && grouped[board.teamRoomId]) {
-                grouped[board.teamRoomId].push(board);
-            }
-        });
-        return grouped;
-    }, [visibleTeamRooms, visibleBoards]);
-
-    const visibleUnassignedBoards = React.useMemo(() => {
-        return visibleBoards.filter(board => !board.teamRoomId);
-    }, [visibleBoards]);
-
 
     return (
         <DragDropContext onDragEnd={onDragEnd}>
