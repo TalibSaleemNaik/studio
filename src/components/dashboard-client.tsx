@@ -565,8 +565,17 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         return visibleBoards.filter(board => !board.teamRoomId);
     }, [visibleBoards]);
     
-    const fetchAllUsers = useCallback(async (currentWorkpanel: Workpanel) => {
-        const memberIds = new Set(Object.keys(currentWorkpanel.members));
+    const fetchAllUsers = useCallback(async (currentWorkpanel: Workpanel, currentTeamRooms: TeamRoom[], currentBoards: Board[]) => {
+        if (!currentWorkpanel) return;
+        const memberIds = new Set<string>(Object.keys(currentWorkpanel.members));
+
+        currentTeamRooms.forEach(room => {
+            Object.keys(room.members || {}).forEach(uid => memberIds.add(uid));
+        });
+
+        currentBoards.forEach(board => {
+            Object.keys(board.members || {}).forEach(uid => memberIds.add(uid));
+        });
 
         // Note: Firestore 'in' query is limited to 30 items.
         // For larger workpanels, this would need pagination or a different approach.
@@ -598,32 +607,32 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             const workpanelData = { id: workspaceSnap.id, ...workspaceSnap.data() } as Workpanel;
             setWorkpanel(workpanelData);
             
-            await fetchAllUsers(workpanelData);
-            
             const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
             const unsubscribeTeamRooms = onSnapshot(teamRoomsQuery, (teamRoomsSnapshot) => {
                 const teamRoomsData = teamRoomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom));
                 setTeamRooms(teamRoomsData);
+                
+                 const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
+                 const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
+                     const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+                     setBoards(boardsData);
+                     fetchAllUsers(workpanelData, teamRoomsData, boardsData);
+                     setLoading(false);
+                     setError(null);
+                 }, (err) => {
+                     console.error("Error fetching boards:", err);
+                     setError("Failed to load teamboards.");
+                     setLoading(false);
+                 });
+                 return () => unsubscribeBoards();
+
             }, (err) => {
                     console.error("Error fetching team rooms:", err);
                     setError("Failed to load team rooms.");
             });
 
-            const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
-            const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
-                const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
-                setBoards(boardsData);
-                setLoading(false);
-                setError(null);
-            }, (err) => {
-                console.error("Error fetching boards:", err);
-                setError("Failed to load teamboards.");
-                setLoading(false);
-            });
-
             return () => {
                 unsubscribeTeamRooms();
-                unsubscribeBoards();
             };
 
         }, (err) => {
@@ -776,7 +785,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                 <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
                                 <span>{teamRoom.name}</span>
                                 </AccordionTrigger>
-                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={() => workpanel && fetchAllUsers(workpanel)} />
+                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={() => workpanel && fetchAllUsers(workpanel, teamRooms, boards)} />
                             </div>
                             <AccordionContent className="pt-4 px-2">
                                 {renderBoardGrid(visibleBoardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
@@ -815,7 +824,3 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
-
-    
-
-    
