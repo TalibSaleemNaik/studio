@@ -66,6 +66,7 @@ export interface TeamRoom {
     workpanelId: string;
     createdAt: any;
     members?: { [key: string]: TeamRoomRole };
+    memberUids?: string[];
 }
 
 export interface Board {
@@ -74,6 +75,7 @@ export interface Board {
     description: string;
     ownerId: string;
     members: { [key: string]: BoardRole };
+    memberUids?: string[];
     isPrivate?: boolean;
     teamRoomId?: string;
     workpanelId?: string;

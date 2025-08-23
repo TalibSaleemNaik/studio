@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy, updateDoc, deleteField, collectionGroup } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy, updateDoc, deleteField, collectionGroup, arrayUnion, arrayRemove } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
@@ -73,7 +73,8 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
 
             const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
             await updateDoc(teamRoomRef, {
-                [`members.${userToInviteId}`]: 'editor' // Default role
+                [`members.${userToInviteId}`]: 'editor', // Default role
+                memberUids: arrayUnion(userToInviteId),
             });
             
             toast({ title: "User invited to TeamRoom!" });
@@ -108,7 +109,10 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
         }
         try {
             const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
-            await updateDoc(teamRoomRef, { [`members.${memberId}`]: deleteField() });
+            await updateDoc(teamRoomRef, { 
+                [`members.${memberId}`]: deleteField(),
+                memberUids: arrayRemove(memberId)
+            });
             toast({ title: "Member removed from TeamRoom." });
             onUpdate();
         } catch (error: any) {
@@ -209,7 +213,8 @@ function CreateTeamRoomDialog({ workpanelId }: { workpanelId: string }) {
                 name,
                 workpanelId,
                 createdAt: serverTimestamp(),
-                members: { [user.uid]: 'manager' }
+                members: { [user.uid]: 'manager' },
+                memberUids: [user.uid]
             });
 
             toast({ title: "TeamRoom created successfully!" });
@@ -285,6 +290,7 @@ function CreateBoardDialog({ workpanelId, teamRoomId, onBoardCreated }: { workpa
                 createdAt: serverTimestamp(),
                 ownerId: user.uid,
                 members: boardMembers,
+                memberUids: [user.uid],
                 isPrivate: isPrivate,
                 teamRoomId: teamRoomId,
                 workpanelId: workpanelId, // Add workpanelId to board document
@@ -483,12 +489,12 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                 const directWorkpanelIds = new Set(workpanelsSnapshot.docs.map(doc => doc.id));
 
                 // 2. Get workpanels containing teamrooms user is a member of
-                const teamRoomsQuery = query(collectionGroup(db, 'teamRooms'), where(`members.${user.uid}`, 'in', ['manager', 'editor', 'viewer']));
+                const teamRoomsQuery = query(collectionGroup(db, 'teamRooms'), where('memberUids', 'array-contains', user.uid));
                 const teamRoomsSnapshot = await getDocs(teamRoomsQuery);
                 const teamRoomWorkpanelIds = new Set(teamRoomsSnapshot.docs.map(doc => doc.data().workpanelId));
                 
                 // 3. Get workpanels containing boards user is a member of
-                const boardsQuery = query(collectionGroup(db, 'boards'), where(`members.${user.uid}`, 'in', ['manager', 'editor', 'viewer']));
+                const boardsQuery = query(collectionGroup(db, 'boards'), where('memberUids', 'array-contains', user.uid));
                 const boardsSnapshot = await getDocs(boardsQuery);
                 const boardWorkpanelIds = new Set(boardsSnapshot.docs.map(doc => doc.data().workpanelId));
 
@@ -660,7 +666,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                         )}
                     >
                         {boardsToRender.map((board, index) => {
-                            const boardMembers = Object.keys(board.members)
+                            const boardMembers = (board.memberUids || [])
                                 .map(uid => allUsers.get(uid))
                                 .filter((u): u is UserProfile => !!u);
                             const canDelete = currentUserRole === 'owner' || currentUserRole === 'admin' || (user?.uid === board.ownerId);

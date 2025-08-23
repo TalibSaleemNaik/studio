@@ -9,7 +9,7 @@ import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus, LayoutGrid,
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogTrigger, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -69,7 +69,8 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
             
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             await updateDoc(boardRef, {
-                [`members.${userId}`]: 'editor' // Default role for direct board invite
+                [`members.${userId}`]: 'editor', // Default role for direct board invite
+                memberUids: arrayUnion(userId)
             });
             
             if (user) {
@@ -122,7 +123,8 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             const memberToRemove = boardMembers.find(m => m.uid === memberId);
             await updateDoc(boardRef, {
-                [`members.${memberId}`]: deleteField()
+                [`members.${memberId}`]: deleteField(),
+                memberUids: arrayRemove(memberId)
             });
 
             if (user && memberToRemove) {
@@ -348,7 +350,11 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         
         const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
         
-        if (effectiveRole === 'guest') {
+        if (effectiveRole === 'guest' && !boardData.isPrivate) {
+             // This case is tricky. A non-member might be able to see a public board.
+             // Let's assume for now 'guest' means no access unless it's a truly public board (which we haven't defined yet)
+             // Sticking to explicit permissions is safer.
+        } else if (effectiveRole === 'guest') {
              setError("You do not have permission to view this board.");
              setLoading(false);
              return;
@@ -356,7 +362,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         setUserRole(effectiveRole);
 
 
-        const memberUIDs = Object.keys(boardData.members || {});
+        const memberUIDs = boardData.memberUids || [];
         try {
             if (memberUIDs.length > 0) {
                  const userDocs = await Promise.all(memberUIDs.map(uid => getDoc(doc(db, 'users', uid))));

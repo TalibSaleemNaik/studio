@@ -16,7 +16,7 @@
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
-          "fieldPath": "members",
+          "fieldPath": "memberUids",
           "arrayConfig": "CONTAINS"
         }
       ]
@@ -26,8 +26,8 @@
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
-          "fieldPath": "members",
-          "order": "ASCENDING"
+          "fieldPath": "memberUids",
+          "arrayConfig": "CONTAINS"
         }
       ]
     }
