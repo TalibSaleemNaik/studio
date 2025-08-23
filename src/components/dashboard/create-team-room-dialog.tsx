@@ -36,8 +36,8 @@ export function CreateTeamRoomDialog({ workpanelId }: CreateTeamRoomDialogProps)
                 name,
                 workpanelId,
                 createdAt: serverTimestamp(),
-                members: { [user.uid]: 'manager' },
-                memberUids: [user.uid]
+                members: {}, // No direct members on creation
+                memberUids: []
             });
 
             toast({ title: "TeamRoom created successfully!" });

@@ -60,10 +60,8 @@ function CreateWorkpanelDialog({ onClose }: { onClose: () => void }) {
                  name: 'My First Board',
                  description: 'This is your first board in your new workpanel!',
                  ownerId: user.uid,
-                 members: {
-                     [user.uid]: 'manager'
-                 },
-                 memberUids: [user.uid],
+                 members: {}, // No direct members on creation
+                 memberUids: [],
                  isPrivate: false,
                  workpanelId: workpanelRef.id
             });

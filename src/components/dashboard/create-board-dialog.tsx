@@ -43,15 +43,13 @@ export function CreateBoardDialog({ workpanelId, teamRoomId, onBoardCreated }: C
             const batch = writeBatch(db);
             const boardRef = doc(collection(db, `workspaces/${workpanelId}/boards`));
             
-            const boardMembers = { [user.uid]: 'manager' };
-
             batch.set(boardRef, {
                 name: title,
                 description: description,
                 createdAt: serverTimestamp(),
                 ownerId: user.uid,
-                members: boardMembers,
-                memberUids: [user.uid],
+                members: {}, // No direct members on creation
+                memberUids: [],
                 isPrivate: isPrivate,
                 teamRoomId: teamRoomId,
                 workpanelId: workpanelId,
