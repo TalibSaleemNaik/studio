@@ -565,93 +565,75 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         return visibleBoards.filter(board => !board.teamRoomId);
     }, [visibleBoards]);
     
+    const fetchAllUsers = useCallback(async (currentWorkpanel: Workpanel) => {
+        const memberIds = new Set(Object.keys(currentWorkpanel.members));
+
+        // Note: Firestore 'in' query is limited to 30 items.
+        // For larger workpanels, this would need pagination or a different approach.
+        if (memberIds.size > 0) {
+            const userDocs = await getDocs(query(collection(db, 'users'), where('__name__', 'in', Array.from(memberIds))));
+            const newAllUsers = new Map<string, UserProfile>();
+            userDocs.forEach(userDoc => {
+                if (userDoc.exists()) {
+                    newAllUsers.set(userDoc.id, userDoc.data() as UserProfile);
+                }
+            });
+            setAllUsers(newAllUsers);
+        }
+    }, []);
+
     useEffect(() => {
         if (!user) {
             setLoading(true);
             return;
         }
 
-        const fetchAllAccessibleData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const userDocRef = doc(db, 'users', user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-
-                if (!userDocSnap.exists()) {
-                    throw new Error("User profile not found.");
-                }
-                const userData = userDocSnap.data() as UserProfile;
-                const accessibleWorkpanels = new Set(userData.accessibleWorkpanels || []);
-
-                if (!accessibleWorkpanels.has(workpanelId)) {
-                    setError("You do not have permission to view this workpanel.");
-                    setLoading(false);
-                    return;
-                }
-                
-                const workpanelRef = doc(db, `workspaces/${workpanelId}`);
-                const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
-                    if (!workspaceSnap.exists()) {
-                        setError("This workpanel does not exist.");
-                        setLoading(false);
-                        return;
-                    }
-                    const workpanelData = { id: workspaceSnap.id, ...workspaceSnap.data() } as Workpanel;
-                    setWorkpanel(workpanelData);
-                    
-                    const memberIds = Object.keys(workpanelData.members);
-                    if (memberIds.length > 0) {
-                         const userDocs = await Promise.all(memberIds.map(uid => getDoc(doc(db, 'users', uid))));
-                         const newAllUsers = new Map<string, UserProfile>();
-                         userDocs.forEach(userDoc => {
-                            if (userDoc.exists()) {
-                                newAllUsers.set(userDoc.id, userDoc.data() as UserProfile);
-                            }
-                         });
-                         setAllUsers(newAllUsers);
-                    }
-                    
-                    const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
-                    const unsubscribeTeamRooms = onSnapshot(teamRoomsQuery, (teamRoomsSnapshot) => {
-                        const teamRoomsData = teamRoomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom));
-                        setTeamRooms(teamRoomsData);
-
-                        const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
-                        const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
-                            const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
-                            setBoards(boardsData);
-                            setLoading(false);
-                            setError(null);
-                        }, (err) => {
-                            console.error("Error fetching boards:", err);
-                            setError("Failed to load teamboards.");
-                            setLoading(false);
-                        });
-                        return () => unsubscribeBoards();
-                    }, (err) => {
-                         console.error("Error fetching team rooms:", err);
-                         setError("Failed to load team rooms.");
-                         setLoading(false);
-                    });
-                    return () => unsubscribeTeamRooms();
-                }, (err) => {
-                    console.error("Error fetching workpanel:", err);
-                    setError("Failed to load workpanel data.");
-                    setLoading(false);
-                });
-                
-                return () => unsubscribeWorkpanel();
-            } catch (err) {
-                 console.error("Error fetching accessible data:", err);
-                 setError("Failed to determine your access permissions.");
-                 setLoading(false);
+        const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+        const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
+            if (!workspaceSnap.exists()) {
+                setError("This workpanel does not exist or you don't have access.");
+                setLoading(false);
+                return;
             }
-        };
+            const workpanelData = { id: workspaceSnap.id, ...workspaceSnap.data() } as Workpanel;
+            setWorkpanel(workpanelData);
+            
+            await fetchAllUsers(workpanelData);
+            
+            const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
+            const unsubscribeTeamRooms = onSnapshot(teamRoomsQuery, (teamRoomsSnapshot) => {
+                const teamRoomsData = teamRoomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom));
+                setTeamRooms(teamRoomsData);
+            }, (err) => {
+                    console.error("Error fetching team rooms:", err);
+                    setError("Failed to load team rooms.");
+            });
 
-        fetchAllAccessibleData();
+            const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
+            const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
+                const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
+                setBoards(boardsData);
+                setLoading(false);
+                setError(null);
+            }, (err) => {
+                console.error("Error fetching boards:", err);
+                setError("Failed to load teamboards.");
+                setLoading(false);
+            });
 
-    }, [user, workpanelId]);
+            return () => {
+                unsubscribeTeamRooms();
+                unsubscribeBoards();
+            };
+
+        }, (err) => {
+            console.error("Error fetching workpanel:", err);
+            setError("Failed to load workpanel data.");
+            setLoading(false);
+        });
+        
+        return () => unsubscribeWorkpanel();
+    }, [user, workpanelId, fetchAllUsers]);
     
 
     const openDeleteDialog = (board: Board) => {
@@ -794,7 +776,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                 <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
                                 <span>{teamRoom.name}</span>
                                 </AccordionTrigger>
-                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={()=>{}} />
+                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={() => workpanel && fetchAllUsers(workpanel)} />
                             </div>
                             <AccordionContent className="pt-4 px-2">
                                 {renderBoardGrid(visibleBoardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
@@ -833,5 +815,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
+
+    
 
     
