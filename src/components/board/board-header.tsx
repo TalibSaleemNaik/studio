@@ -13,20 +13,22 @@ import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '../ui/command';
 import { Checkbox } from '../ui/checkbox';
-import { BoardMember, BoardRole } from './types';
+import { Board, BoardMember, BoardRole } from './types';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { collection, doc, query, where, getDocs, runTransaction, arrayUnion, updateDoc, deleteField, arrayRemove, getDoc } from 'firebase/firestore';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
-function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
+function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRole }: { workpanelId: string, boardId: string, board: Board, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
     
     if (userRole !== 'manager') return null;
+
+    const directMembers = boardMembers.filter(m => board.members[m.uid]);
 
     const handleInvite = async () => {
         const trimmedEmail = inviteEmail.trim().toLowerCase();
@@ -201,7 +203,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                     </div>
                     <div className="space-y-2">
                         <h4 className="font-medium">People with access</h4>
-                        {boardMembers.map(member => (
+                        {directMembers.map(member => (
                             <div key={member.uid} className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <Avatar className="h-8 w-8">
@@ -244,6 +246,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
 interface BoardHeaderProps {
     workpanelId: string;
     boardId: string;
+    board: Board;
     boardMembers: BoardMember[];
     userRole: BoardRole;
     activeView: string;
@@ -265,6 +268,7 @@ interface BoardHeaderProps {
 export function BoardHeader({
     workpanelId,
     boardId,
+    board,
     boardMembers,
     userRole,
     activeView,
@@ -383,7 +387,7 @@ export function BoardHeader({
                 <History className="mr-2 h-4 w-4" />
                 Activity
             </Button>
-            <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} userRole={userRole} />
+            <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} board={board} boardMembers={boardMembers} userRole={userRole} />
             {activeView === 'kanban' && openCreateGroupDialog}
         </div>
     </div>

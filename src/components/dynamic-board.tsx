@@ -387,6 +387,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         <BoardHeader
             workpanelId={workpanelId}
             boardId={boardId}
+            board={board}
             boardMembers={boardMembers}
             userRole={userRole}
             activeView={activeView}
@@ -506,5 +507,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
