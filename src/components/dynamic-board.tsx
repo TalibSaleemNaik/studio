@@ -10,7 +10,7 @@ import { collection, doc, onSnapshot, orderBy, query, updateDoc, writeBatch, get
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
-import type { Task, Columns, BoardMember, Board as BoardType, TeamRoom as TeamRoomType, WorkpanelRole, BoardRole } from './board/types';
+import type { Task, Columns, BoardMember, Board as BoardType, TeamRoom as TeamRoomType, WorkpanelRole, BoardRole, UserProfile } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
@@ -158,18 +158,27 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         }
         setUserRole(effectiveRole);
 
-        const memberUIDs = boardData.memberUids || [];
+        // START: Comprehensive member fetching logic
+        const memberUIDs = new Set<string>();
+        Object.keys(boardData.members || {}).forEach(uid => memberUIDs.add(uid));
+        Object.keys(teamRoomData?.members || {}).forEach(uid => memberUIDs.add(uid));
+        Object.keys(workpanelData?.members || {}).forEach(uid => memberUIDs.add(uid));
+
         try {
-            if (memberUIDs.length > 0) {
-                 const userDocs = await Promise.all(memberUIDs.map(uid => getDoc(doc(db, 'users', uid))));
+            if (memberUIDs.size > 0) {
+                 const uidsToFetch = Array.from(memberUIDs);
+                 const userDocs = await Promise.all(uidsToFetch.map(uid => getDoc(doc(db, 'users', uid))));
                  const membersData: BoardMember[] = userDocs
                     .filter(docSnap => docSnap.exists())
                     .map(docSnap => {
-                        const userData = docSnap.data() as Omit<BoardMember, 'uid' | 'role'>;
+                        const userData = docSnap.data() as UserProfile;
+                        const uid = docSnap.id;
+                        // We calculate the *effective* role for the board for each user to display
+                        const role = calculateEffectiveRole(uid, boardData, teamRoomData, workpanelData);
                         return {
                             ...userData,
-                            uid: docSnap.id,
-                            role: boardData.members[docSnap.id],
+                            uid: uid,
+                            role: role,
                         }
                     });
                 setBoardMembers(membersData);
@@ -180,6 +189,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
              console.error("Error fetching board members:", e);
              toast({ variant: 'destructive', title: 'Error loading board members' });
         }
+        // END: Comprehensive member fetching logic
 
         const groupsQuery = query(collection(db, `workspaces/${workpanelId}/boards/${boardId}/groups`), orderBy('order'));
         const tasksQuery = query(collection(db, `workspaces/${workpanelId}/boards/${boardId}/tasks`));
@@ -496,3 +506,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
