@@ -152,7 +152,7 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
     };
     
     // Function to calculate the effective role for a user in this teamroom
-    const getEffectiveRole = (uid: string): TeamRoomRole | 'Inherited' => {
+    const getEffectiveRole = (uid: string): TeamRoomRole | null => {
         const directRole = teamRoomMembers[uid];
         if (directRole) return directRole;
 
@@ -162,7 +162,7 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
             if (workpanelRole === 'member') return 'editor';
             if (workpanelRole === 'viewer') return 'viewer';
         }
-        return 'Inherited'; // Should not happen with current logic, but as a fallback.
+        return null;
     }
 
 
@@ -200,7 +200,9 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
                             const effectiveRole = getEffectiveRole(uid);
                             const isInherited = !teamRoomMembers[uid] && workpanelMembers[uid];
 
-                            return member ? (
+                            if (!member || !effectiveRole) return null;
+
+                            return (
                                 <div key={uid} className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <Avatar className="h-8 w-8">
@@ -213,32 +215,26 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {isInherited ? (
-                                             <div className="text-sm text-muted-foreground pr-2 w-[110px] text-right">
-                                                Inherited
-                                            </div>
-                                        ) : (
-                                            <Select
-                                                value={effectiveRole}
-                                                onValueChange={(value) => handleRoleChange(uid, value as TeamRoomRole)}
-                                                disabled={isCurrentUser}
-                                            >
-                                                <SelectTrigger className="w-[110px]">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="manager">Manager</SelectItem>
-                                                    <SelectItem value="editor">Editor</SelectItem>
-                                                    <SelectItem value="viewer">Viewer</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        )}
+                                        <Select
+                                            value={effectiveRole}
+                                            onValueChange={(value) => handleRoleChange(uid, value as TeamRoomRole)}
+                                            disabled={isCurrentUser || isInherited}
+                                        >
+                                            <SelectTrigger className="w-[110px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="manager">Manager</SelectItem>
+                                                <SelectItem value="editor">Editor</SelectItem>
+                                                <SelectItem value="viewer">Viewer</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(uid)} disabled={isCurrentUser || isInherited}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
                                 </div>
-                            ) : null;
+                            );
                         })}
                          {displayedUserUids.length === 0 && <p className="text-sm text-muted-foreground">Only you have access to this TeamRoom.</p>}
                     </div>
