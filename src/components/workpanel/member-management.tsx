@@ -188,14 +188,14 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
     }
     
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
-    const canManageSettings = currentUserRole === 'admin' || currentUserRole === 'manager';
+    const canManageSettings = currentUserRole === 'admin' || currentUserRole === 'owner';
 
     if (!canManageSettings) {
          return (
              <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-destructive/10 rounded-lg">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
                 <p className="text-destructive font-semibold">Access Denied</p>
-                <p className="text-muted-foreground">You must be an admin or manager to manage workpanel settings.</p>
+                <p className="text-muted-foreground">You must be an admin or owner to manage workpanel settings.</p>
             </div>
         );
     }
@@ -247,8 +247,9 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="admin">Admin</SelectItem>
-                                            <SelectItem value="manager">Manager</SelectItem>
+                                            <SelectItem value="owner">Owner</SelectItem>
                                             <SelectItem value="member">Member</SelectItem>
+                                            <SelectItem value="viewer">Viewer</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <Button 

@@ -19,7 +19,7 @@ import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, wr
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
-import { UserProfile, Board as BoardType, WorkpanelRole, Folder as FolderType, FolderRole } from "./board/types";
+import { UserProfile, Board as BoardType, WorkpanelRole, TeamRoom as TeamRoomType, TeamRoomRole } from "./board/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { Checkbox } from "./ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
@@ -31,7 +31,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from ".
 interface Board extends BoardType {
   id: string;
 }
-interface Folder extends FolderType {
+interface TeamRoom extends TeamRoomType {
   id: string;
 }
 
@@ -39,13 +39,13 @@ interface Workpanel {
     members: { [key: string]: WorkpanelRole };
 }
 
-function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpanelId: string, folder: Folder, allUsers: Map<string, UserProfile>, onUpdate: () => void }) {
+function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { workpanelId: string, teamRoom: TeamRoom, allUsers: Map<string, UserProfile>, onUpdate: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
     const [isInviting, setIsInviting] = useState(false);
     const { toast } = useToast();
-    const folderMembers = folder.members || {};
-    const folderMemberUids = Object.keys(folderMembers);
+    const teamRoomMembers = teamRoom.members || {};
+    const teamRoomMemberUids = Object.keys(teamRoomMembers);
 
     const handleInvite = async () => {
         const trimmedEmail = inviteEmail.trim().toLowerCase();
@@ -63,15 +63,15 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
                 throw new Error("User with that email not found.");
             }
             const userToInvite = querySnapshot.docs[0];
-            if (folderMemberUids.includes(userToInvite.id)) {
-                throw new Error("User is already a member of this folder.");
+            if (teamRoomMemberUids.includes(userToInvite.id)) {
+                throw new Error("User is already a member of this TeamRoom.");
             }
 
-            const folderRef = doc(db, `workspaces/${workpanelId}/folders`, folder.id);
-            await updateDoc(folderRef, {
+            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
+            await updateDoc(teamRoomRef, {
                 [`members.${userToInvite.id}`]: 'editor' // Default role
             });
-            toast({ title: "User invited to folder!" });
+            toast({ title: "User invited to TeamRoom!" });
             setInviteEmail('');
             onUpdate();
         } catch (error: any) {
@@ -81,10 +81,10 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
         }
     };
 
-    const handleRoleChange = async (memberId: string, newRole: FolderRole) => {
+    const handleRoleChange = async (memberId: string, newRole: TeamRoomRole) => {
         try {
-            const folderRef = doc(db, `workspaces/${workpanelId}/folders`, folder.id);
-            await updateDoc(folderRef, { [`members.${memberId}`]: newRole });
+            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
+            await updateDoc(teamRoomRef, { [`members.${memberId}`]: newRole });
             toast({ title: "Member role updated." });
             onUpdate();
         } catch (error: any) {
@@ -94,9 +94,9 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
 
     const handleRemoveMember = async (memberId: string) => {
         try {
-            const folderRef = doc(db, `workspaces/${workpanelId}/folders`, folder.id);
-            await updateDoc(folderRef, { [`members.${memberId}`]: deleteField() });
-            toast({ title: "Member removed from folder." });
+            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
+            await updateDoc(teamRoomRef, { [`members.${memberId}`]: deleteField() });
+            toast({ title: "Member removed from TeamRoom." });
             onUpdate();
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Failed to remove member', description: error.message });
@@ -112,9 +112,9 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
             </DialogTrigger>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Share Folder: {folder.name}</DialogTitle>
+                    <DialogTitle>Share TeamRoom: {teamRoom.name}</DialogTitle>
                     <DialogDescription>
-                        Invite people to this folder. They will get access to all teamboards inside it.
+                        Invite people to this TeamRoom. They will get access to all teamboards inside it.
                     </DialogDescription>
                 </DialogHeader>
                  <div className="space-y-4 py-4">
@@ -131,7 +131,7 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
                     </div>
                     <div className="space-y-2">
                         <h4 className="font-medium">People with access</h4>
-                        {folderMemberUids.map(uid => {
+                        {teamRoomMemberUids.map(uid => {
                             const member = allUsers.get(uid);
                             return member ? (
                                 <div key={uid} className="flex items-center justify-between">
@@ -147,8 +147,8 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Select
-                                            value={folderMembers[uid]}
-                                            onValueChange={(value) => handleRoleChange(uid, value as FolderRole)}
+                                            value={teamRoomMembers[uid]}
+                                            onValueChange={(value) => handleRoleChange(uid, value as TeamRoomRole)}
                                         >
                                             <SelectTrigger className="w-[110px]">
                                                 <SelectValue />
@@ -165,7 +165,7 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
                                 </div>
                             ) : null;
                         })}
-                         {folderMemberUids.length === 0 && <p className="text-sm text-muted-foreground">Only you have access to this folder.</p>}
+                         {teamRoomMemberUids.length === 0 && <p className="text-sm text-muted-foreground">Only you have access to this TeamRoom.</p>}
                     </div>
                 </div>
             </DialogContent>
@@ -173,7 +173,7 @@ function ShareFolderDialog({ workpanelId, folder, allUsers, onUpdate }: { workpa
     )
 }
 
-function CreateFolderDialog({ workpanelId }: { workpanelId: string }) {
+function CreateTeamRoomDialog({ workpanelId }: { workpanelId: string }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [name, setName] = useState('');
@@ -183,25 +183,25 @@ function CreateFolderDialog({ workpanelId }: { workpanelId: string }) {
     const handleAction = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim() || !user) {
-            toast({ variant: 'destructive', title: 'Folder name is required.' });
+            toast({ variant: 'destructive', title: 'TeamRoom name is required.' });
             return;
         }
 
         setIsCreating(true);
         try {
-            await addDoc(collection(db, `workspaces/${workpanelId}/folders`), {
+            await addDoc(collection(db, `workspaces/${workpanelId}/teamRooms`), {
                 name,
                 workpanelId,
                 createdAt: serverTimestamp(),
                 members: { [user.uid]: 'editor' } // Creator is editor by default
             });
 
-            toast({ title: "Folder created successfully!" });
+            toast({ title: "TeamRoom created successfully!" });
             setIsOpen(false);
             setName('');
         } catch (error) {
-            console.error("Failed to create folder:", error);
-            toast({ variant: 'destructive', title: 'Failed to create folder' });
+            console.error("Failed to create TeamRoom:", error);
+            toast({ variant: 'destructive', title: 'Failed to create TeamRoom' });
         } finally {
             setIsCreating(false);
         }
@@ -212,25 +212,25 @@ function CreateFolderDialog({ workpanelId }: { workpanelId: string }) {
             <DialogTrigger asChild>
                 <Button>
                     <FolderPlus className="mr-2 h-4 w-4" />
-                    Create Folder
+                    Create TeamRoom
                 </Button>
             </DialogTrigger>
             <DialogContent>
                  <form onSubmit={handleAction}>
                     <DialogHeader>
-                        <DialogTitle>Create New Folder</DialogTitle>
+                        <DialogTitle>Create New TeamRoom</DialogTitle>
                         <DialogDescription>
-                            Give your new folder a name to organize your teamboards.
+                            Give your new TeamRoom a name to organize your teamboards.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
-                         <Label htmlFor="name">Folder Name</Label>
+                         <Label htmlFor="name">TeamRoom Name</Label>
                          <Input id="name" placeholder="e.g. Q4 Projects" required value={name} onChange={(e) => setName(e.target.value)} disabled={isCreating} />
                     </div>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
                         <Button type="submit" disabled={isCreating}>
-                            {isCreating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</> : 'Create Folder'}
+                            {isCreating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</> : 'Create TeamRoom'}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -240,7 +240,7 @@ function CreateFolderDialog({ workpanelId }: { workpanelId: string }) {
 }
 
 
-function CreateBoardDialog({ workpanelId, folderId, onBoardCreated }: { workpanelId: string, folderId: string, onBoardCreated: () => void }) {
+function CreateBoardDialog({ workpanelId, teamRoomId, onBoardCreated }: { workpanelId: string, teamRoomId: string, onBoardCreated: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [title, setTitle] = useState('');
@@ -270,7 +270,7 @@ function CreateBoardDialog({ workpanelId, folderId, onBoardCreated }: { workpane
                 ownerId: user.uid,
                 members: boardMembers,
                 isPrivate: isPrivate,
-                folderId: folderId,
+                teamRoomId: teamRoomId,
             });
 
             const defaultGroups = ['To Do', 'In Progress', 'Done'];
@@ -356,7 +356,7 @@ function CreateBoardDialog({ workpanelId, folderId, onBoardCreated }: { workpane
     )
 }
 
-function BoardCard({ board, workpanelId, folders, boardMembers, openDeleteDialog, handleMoveBoard, canDelete }: { board: Board, workpanelId: string, folders: Folder[], boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void, handleMoveBoard: (boardId: string, newFolderId: string) => void, canDelete: boolean }) {
+function BoardCard({ board, workpanelId, teamRooms, boardMembers, openDeleteDialog, handleMoveBoard, canDelete }: { board: Board, workpanelId: string, teamRooms: TeamRoom[], boardMembers: UserProfile[], openDeleteDialog: (board: Board) => void, handleMoveBoard: (boardId: string, newTeamRoomId: string) => void, canDelete: boolean }) {
     const owner = boardMembers.find(m => m.uid === board.ownerId);
 
     return (
@@ -381,12 +381,12 @@ function BoardCard({ board, workpanelId, folders, boardMembers, openDeleteDialog
                                     <span>Move to</span>
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
-                                     {folders.filter(f => f.id !== board.folderId).map(folder => (
-                                         <DropdownMenuItem key={folder.id} onSelect={() => handleMoveBoard(board.id, folder.id)}>
-                                             {folder.name}
+                                     {teamRooms.filter(f => f.id !== board.teamRoomId).map(teamRoom => (
+                                         <DropdownMenuItem key={teamRoom.id} onSelect={() => handleMoveBoard(board.id, teamRoom.id)}>
+                                             {teamRoom.name}
                                          </DropdownMenuItem>
                                      ))}
-                                     { board.folderId && 
+                                     { board.teamRoomId && 
                                         <DropdownMenuItem onSelect={() => handleMoveBoard(board.id, '')}>
                                             Uncategorized
                                         </DropdownMenuItem>
@@ -438,7 +438,7 @@ function BoardCard({ board, workpanelId, folders, boardMembers, openDeleteDialog
 }
 
 export function DashboardClient({ workpanelId }: { workpanelId: string }) {
-    const [folders, setFolders] = useState<Folder[]>([]);
+    const [teamRooms, setTeamRooms] = useState<TeamRoom[]>([]);
     const [boards, setBoards] = useState<Board[]>([]);
 
     const [workpanel, setWorkpanel] = useState<Workpanel | null>(null);
@@ -486,17 +486,17 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                  setAllUsers(newAllUsers);
             }
 
-            // Fetch Folders
-            const foldersQuery = query(collection(db, `workspaces/${workpanelId}/folders`), orderBy('createdAt'));
-            const unsubscribeFolders = onSnapshot(foldersQuery, (foldersSnapshot) => {
-                const foldersData = foldersSnapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() } as Folder))
-                    .filter(folder => {
-                        const isMember = folder.members && user.uid && folder.members[user.uid];
+            // Fetch TeamRooms
+            const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
+            const unsubscribeTeamRooms = onSnapshot(teamRoomsQuery, (teamRoomsSnapshot) => {
+                const teamRoomsData = teamRoomsSnapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom))
+                    .filter(teamRoom => {
+                        const isMember = teamRoom.members && user.uid && teamRoom.members[user.uid];
                         const isAdmin = workpanelData.members[user.uid] === 'admin';
                         return isMember || isAdmin;
                     });
-                setFolders(foldersData);
+                setTeamRooms(teamRoomsData);
 
                 // Fetch Boards
                 const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`));
@@ -504,12 +504,12 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                     const boardsData = boardsSnapshot.docs
                         .map(doc => ({ id: doc.id, ...doc.data() } as Board))
                         .filter(board => {
-                            const folder = foldersData.find(f => f.id === board.folderId);
-                            const hasFolderAccess = folder && folder.members && user.uid && folder.members[user.uid];
+                            const teamRoom = teamRoomsData.find(f => f.id === board.teamRoomId);
+                            const hasTeamRoomAccess = teamRoom && teamRoom.members && user.uid && teamRoom.members[user.uid];
                             const isBoardMember = board.members && user.uid && board.members[user.uid];
-                            const isAdmin = workpanelData.members[user.uid] === 'admin';
+                            const isAdmin = workpanelData.members[user.uid] === 'admin' || workpanelData.members[user.uid] === 'member';
                             
-                            return !board.isPrivate || isBoardMember || hasFolderAccess || isAdmin;
+                            return !board.isPrivate || isBoardMember || hasTeamRoomAccess || isAdmin;
                         });
                     setBoards(boardsData);
                     setError(null);
@@ -517,7 +517,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                 });
                 return () => unsubscribeBoards();
             });
-            return () => unsubscribeFolders();
+            return () => unsubscribeTeamRooms();
         }, (err) => {
             console.error("Error fetching workpanel:", err);
             setError("Failed to load workpanel data.");
@@ -527,21 +527,21 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         return () => unsubscribeWorkpanel();
     }, [user, workpanelId]);
     
-    const boardsByFolder = React.useMemo(() => {
+    const boardsByTeamRoom = React.useMemo(() => {
         const grouped: {[key: string]: Board[]} = {};
-        folders.forEach(folder => {
-            grouped[folder.id] = [];
+        teamRooms.forEach(teamRoom => {
+            grouped[teamRoom.id] = [];
         });
         boards.forEach(board => {
-            if (board.folderId && grouped[board.folderId]) {
-                grouped[board.folderId].push(board);
+            if (board.teamRoomId && grouped[board.teamRoomId]) {
+                grouped[board.teamRoomId].push(board);
             }
         });
         return grouped;
-    }, [folders, boards]);
+    }, [teamRooms, boards]);
     
     const unassignedBoards = React.useMemo(() => {
-        return boards.filter(board => !board.folderId);
+        return boards.filter(board => !board.teamRoomId);
     }, [boards]);
 
 
@@ -573,10 +573,10 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         }
     };
     
-    const handleMoveBoard = async (boardId: string, newFolderId: string) => {
+    const handleMoveBoard = async (boardId: string, newTeamRoomId: string) => {
         const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
         try {
-            await updateDoc(boardRef, { folderId: newFolderId || deleteField() });
+            await updateDoc(boardRef, { teamRoomId: newTeamRoomId || deleteField() });
             toast({ title: "Board moved successfully!" });
         } catch (error) {
             console.error("Error moving board: ", error);
@@ -591,15 +591,15 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             return;
         }
 
-        const sourceFolderId = source.droppableId;
-        const destFolderId = destination.droppableId;
+        const sourceTeamRoomId = source.droppableId;
+        const destTeamRoomId = destination.droppableId;
 
-        if (sourceFolderId === destFolderId) {
-            // Reordering within the same folder is not implemented yet.
+        if (sourceTeamRoomId === destTeamRoomId) {
+            // Reordering within the same TeamRoom is not implemented yet.
             return;
         }
         
-        handleMoveBoard(draggableId, destFolderId === 'unassigned' ? '' : destFolderId);
+        handleMoveBoard(draggableId, destTeamRoomId === 'unassigned' ? '' : destTeamRoomId);
     };
 
 
@@ -618,11 +618,11 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     }
 
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
-    const canCreate = currentUserRole === 'admin' || currentUserRole === 'manager';
+    const canCreate = currentUserRole === 'admin' || currentUserRole === 'owner';
 
-    const renderBoardGrid = (boardsToRender: Board[], folderId: string) => {
+    const renderBoardGrid = (boardsToRender: Board[], teamRoomId: string) => {
         return (
-            <Droppable droppableId={folderId} type="BOARD">
+            <Droppable droppableId={teamRoomId} type="BOARD">
                 {(provided, snapshot) => (
                     <div
                         ref={provided.innerRef}
@@ -649,7 +649,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                             <BoardCard
                                                 board={board}
                                                 workpanelId={workpanelId}
-                                                folders={folders}
+                                                teamRooms={teamRooms}
                                                 boardMembers={boardMembers}
                                                 openDeleteDialog={openDeleteDialog}
                                                 handleMoveBoard={handleMoveBoard}
@@ -661,7 +661,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                             );
                         })}
                         {provided.placeholder}
-                        {canCreate && <CreateBoardDialog workpanelId={workpanelId} folderId={folderId === 'unassigned' ? '' : folderId} onBoardCreated={() => {}} />}
+                        {canCreate && <CreateBoardDialog workpanelId={workpanelId} teamRoomId={teamRoomId === 'unassigned' ? '' : teamRoomId} onBoardCreated={() => {}} />}
                     </div>
                 )}
             </Droppable>
@@ -672,26 +672,26 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         <DragDropContext onDragEnd={onDragEnd}>
             {canCreate && (
                 <div className="mb-8">
-                     <CreateFolderDialog workpanelId={workpanelId} />
+                     <CreateTeamRoomDialog workpanelId={workpanelId} />
                 </div>
             )}
-            <Accordion type="multiple" defaultValue={folders.map(f => f.id)} className="w-full space-y-4">
-                 {folders.map(folder => (
-                    <AccordionItem value={folder.id} key={folder.id} className="border rounded-lg bg-card">
+            <Accordion type="multiple" defaultValue={teamRooms.map(f => f.id)} className="w-full space-y-4">
+                 {teamRooms.map(teamRoom => (
+                    <AccordionItem value={teamRoom.id} key={teamRoom.id} className="border rounded-lg bg-card">
                          <div className="flex items-center justify-between px-4 py-3 rounded-t-lg data-[state=open]:border-b hover:bg-muted/50">
                             <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left">
-                               <span>{folder.name}</span>
+                               <span>{teamRoom.name}</span>
                             </AccordionTrigger>
-                            <ShareFolderDialog workpanelId={workpanelId} folder={folder} allUsers={allUsers} onUpdate={()=>{}} />
+                            <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={()=>{}} />
                         </div>
                         <AccordionContent className="pt-4 px-2">
-                             {renderBoardGrid(boardsByFolder[folder.id] || [], folder.id)}
+                             {renderBoardGrid(boardsByTeamRoom[teamRoom.id] || [], teamRoom.id)}
                         </AccordionContent>
                     </AccordionItem>
                 ))}
             </Accordion>
            
-            {(unassignedBoards.length > 0 || folders.length === 0) && (
+            {(unassignedBoards.length > 0 || teamRooms.length === 0) && (
                 <div className="mt-8">
                     <h2 className="text-xl font-headline font-semibold mb-4">Uncategorized Boards</h2>
                     {renderBoardGrid(unassignedBoards, 'unassigned')}
@@ -720,5 +720,3 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
-
-    

@@ -47,9 +47,9 @@ export interface UserProfile {
     email: string;
 }
 
-export type WorkpanelRole = 'admin' | 'manager' | 'member';
-export type BoardRole = 'owner' | 'editor' | 'viewer';
-export type FolderRole = 'editor' | 'viewer';
+export type WorkpanelRole = 'owner' | 'admin' | 'member' | 'viewer' | 'guest';
+export type TeamRoomRole = 'manager' | 'editor' | 'viewer' | 'guest';
+export type BoardRole = 'manager' | 'editor' | 'viewer';
 
 
 export interface WorkpanelMember {
@@ -61,12 +61,12 @@ export interface BoardMember extends UserProfile {
   role: BoardRole;
 }
 
-export interface Folder {
+export interface TeamRoom {
     id: string;
     name: string;
     workpanelId: string;
     createdAt: any;
-    members?: { [key: string]: FolderRole };
+    members?: { [key: string]: TeamRoomRole };
 }
 
 export interface Board {
@@ -76,7 +76,7 @@ export interface Board {
     ownerId: string;
     members: { [key: string]: BoardRole };
     isPrivate?: boolean;
-    folderId?: string;
+    teamRoomId?: string;
 }
 
 export interface Comment {

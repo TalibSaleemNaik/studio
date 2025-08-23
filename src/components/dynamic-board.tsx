@@ -19,7 +19,7 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Checkbox } from './ui/checkbox';
-import { Task, Columns, BoardMember, Board as BoardType, Folder as FolderType } from './board/types';
+import { Task, Columns, BoardMember, Board as BoardType, TeamRoom as TeamRoomType } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
@@ -92,8 +92,8 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
         }
     };
     
-    const handleRoleChange = async (memberId: string, newRole: 'editor' | 'viewer' | 'owner') => {
-        if (newRole === 'owner') return; // Should have a separate "transfer ownership" flow
+    const handleRoleChange = async (memberId: string, newRole: 'editor' | 'viewer' | 'manager') => {
+        if (newRole === 'manager') return; // Should have a separate "transfer ownership" flow
         try {
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             await updateDoc(boardRef, {
@@ -171,7 +171,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
                                         <p className="text-sm text-muted-foreground">{member.email}</p>
                                     </div>
                                 </div>
-                                {member.role !== 'owner' ? (
+                                {member.role !== 'manager' ? (
                                     <div className="flex items-center gap-2">
                                         <Select 
                                             value={member.role}
@@ -190,7 +190,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelI
                                         </Button>
                                     </div>
                                 ) : (
-                                    <span className="text-sm text-muted-foreground pr-4">Owner</span>
+                                    <span className="text-sm text-muted-foreground pr-4">Manager</span>
                                 )}
                             </div>
                         ))}
@@ -294,14 +294,14 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         const workpanelData = workpanelSnap.data();
         const userWorkpanelRole = workpanelData?.members[user.uid];
 
-        let hasFolderAccess = false;
-        if(boardData.folderId){
-            const folderRef = doc(db, `workspaces/${workpanelId}/folders/${boardData.folderId}`);
-            const folderSnap = await getDoc(folderRef);
-            if(folderSnap.exists()){
-                const folderData = folderSnap.data() as FolderType;
-                if(folderData.members && folderData.members[user.uid]){
-                    hasFolderAccess = true;
+        let hasTeamRoomAccess = false;
+        if(boardData.teamRoomId){
+            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms/${boardData.teamRoomId}`);
+            const teamRoomSnap = await getDoc(teamRoomRef);
+            if(teamRoomSnap.exists()){
+                const teamRoomData = teamRoomSnap.data() as TeamRoomType;
+                if(teamRoomData.members && teamRoomData.members[user.uid]){
+                    hasTeamRoomAccess = true;
                 }
             }
         }
@@ -309,8 +309,8 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         const hasPermission = !boardData.isPrivate || 
                               boardData.members[user.uid] || 
                               userWorkpanelRole === 'admin' ||
-                              userWorkpanelRole === 'manager' ||
-                              hasFolderAccess;
+                              userWorkpanelRole === 'owner' ||
+                              hasTeamRoomAccess;
 
 
         if (!hasPermission) {
