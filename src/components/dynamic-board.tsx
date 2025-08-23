@@ -9,7 +9,7 @@ import { Loader2, Share, Search, ChevronDown, Trash2, History, Plus, LayoutGrid,
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where, writeBatch, getDoc, getDocs, deleteField, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { Dialog, DialogTrigger, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -20,7 +20,7 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Checkbox } from './ui/checkbox';
-import { Task, Columns, BoardMember, Board as BoardType, TeamRoom as TeamRoomType, WorkpanelRole, TeamRoomRole, BoardRole } from './board/types';
+import { Task, Columns, BoardMember, Board as BoardType, TeamRoom as TeamRoomType, WorkpanelRole, TeamRoomRole, BoardRole, UserProfile } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
@@ -67,10 +67,17 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 return;
             }
             
-            const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
-            await updateDoc(boardRef, {
-                [`members.${userId}`]: 'editor', // Default role for direct board invite
-                memberUids: arrayUnion(userId)
+            await runTransaction(db, async (transaction) => {
+                const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+                const userDocRef = doc(db, `users`, userId);
+
+                transaction.update(boardRef, {
+                    [`members.${userId}`]: 'editor', // Default role for direct board invite
+                    memberUids: arrayUnion(userId)
+                });
+                 transaction.update(userDocRef, {
+                    accessibleWorkpanels: arrayUnion(workpanelId)
+                });
             });
             
             if (user) {

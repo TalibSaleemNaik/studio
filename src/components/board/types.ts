@@ -45,6 +45,7 @@ export interface UserProfile {
     displayName: string;
     photoURL: string;
     email: string;
+    accessibleWorkpanels?: string[];
 }
 
 export type WorkpanelRole = 'owner' | 'admin' | 'member' | 'viewer' | 'guest';

@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy, updateDoc, deleteField, collectionGroup, arrayUnion, arrayRemove } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, where, getDocs, deleteDoc, getDoc, orderBy, updateDoc, deleteField, collectionGroup, arrayUnion, arrayRemove, runTransaction } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { logActivity, SimpleUser } from "@/lib/activity-logger";
@@ -64,17 +64,26 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
             if (querySnapshot.empty) {
                 throw new Error("User with that email not found.");
             }
-            const userToInvite = querySnapshot.docs[0];
-            const userToInviteId = userToInvite.id;
+            const userToInviteDoc = querySnapshot.docs[0];
+            const userToInviteId = userToInviteDoc.id;
 
             if (teamRoomMemberUids.includes(userToInviteId)) {
                 throw new Error("User is already a member of this TeamRoom.");
             }
 
-            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
-            await updateDoc(teamRoomRef, {
-                [`members.${userToInviteId}`]: 'editor', // Default role
-                memberUids: arrayUnion(userToInviteId),
+            // Transaction to update teamroom and user doc
+             await runTransaction(db, async (transaction) => {
+                const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
+                const userDocRef = doc(db, `users`, userToInviteId);
+
+                transaction.update(teamRoomRef, {
+                    [`members.${userToInviteId}`]: 'editor', // Default role
+                    memberUids: arrayUnion(userToInviteId),
+                });
+
+                transaction.update(userDocRef, {
+                    accessibleWorkpanels: arrayUnion(workpanelId)
+                });
             });
             
             toast({ title: "User invited to TeamRoom!" });
@@ -113,6 +122,8 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                 [`members.${memberId}`]: deleteField(),
                 memberUids: arrayRemove(memberId)
             });
+            // Note: We are NOT removing the workpanel from their accessible list here.
+            // They might have access via another board or room. A cleanup script could handle this.
             toast({ title: "Member removed from TeamRoom." });
             onUpdate();
         } catch (error: any) {
@@ -482,30 +493,29 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
 
         const fetchAllAccessibleData = async () => {
             setLoading(true);
+            setError(null);
             try {
-                // 1. Get workpanels user is a direct member of
-                const workpanelsQuery = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['owner', 'admin', 'member', 'viewer']));
-                const workpanelsSnapshot = await getDocs(workpanelsQuery);
-                const directWorkpanelIds = new Set(workpanelsSnapshot.docs.map(doc => doc.id));
+                // 1. Get the current user's document to find accessible workpanels
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (!userDocSnap.exists()) {
+                    throw new Error("User profile not found.");
+                }
+                const userData = userDocSnap.data() as UserProfile;
+                const accessibleWorkpanels = new Set(userData.accessibleWorkpanels || []);
 
-                // 2. Get workpanels containing teamrooms user is a member of
-                const teamRoomsQuery = query(collectionGroup(db, 'teamRooms'), where('memberUids', 'array-contains', user.uid));
-                const teamRoomsSnapshot = await getDocs(teamRoomsQuery);
-                const teamRoomWorkpanelIds = new Set(teamRoomsSnapshot.docs.map(doc => doc.data().workpanelId));
+                // 2. Add workpanels where user is a direct member
+                const directWorkpanelsQuery = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['owner', 'admin', 'member', 'viewer']));
+                const directWorkpanelsSnapshot = await getDocs(directWorkpanelsQuery);
+                directWorkpanelsSnapshot.forEach(doc => accessibleWorkpanels.add(doc.id));
                 
-                // 3. Get workpanels containing boards user is a member of
-                const boardsQuery = query(collectionGroup(db, 'boards'), where('memberUids', 'array-contains', user.uid));
-                const boardsSnapshot = await getDocs(boardsQuery);
-                const boardWorkpanelIds = new Set(boardsSnapshot.docs.map(doc => doc.data().workpanelId));
-
-                const allWorkpanelIds = new Set([...directWorkpanelIds, ...teamRoomWorkpanelIds, ...boardWorkpanelIds]);
-
-                if (!allWorkpanelIds.has(workpanelId)) {
+                if (!accessibleWorkpanels.has(workpanelId)) {
                      setError("You do not have permission to view this workpanel.");
                      setLoading(false);
                      return;
                 }
                 
+                // 3. Subscribe to the current workpanel and its contents
                 const workpanelRef = doc(db, `workspaces/${workpanelId}`);
                 const unsubscribeWorkpanel = onSnapshot(workpanelRef, async (workspaceSnap) => {
                     if (!workspaceSnap.exists()) {
@@ -528,6 +538,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                          setAllUsers(newAllUsers);
                     }
                     
+                    // Subscribe to teamrooms and boards within this specific workpanel
                     const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
                     const unsubscribeTeamRooms = onSnapshot(teamRoomsQuery, (teamRoomsSnapshot) => {
                         const teamRoomsData = teamRoomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom));
@@ -537,25 +548,31 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                         const unsubscribeBoards = onSnapshot(boardsQuery, (boardsSnapshot) => {
                             const boardsData = boardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Board));
                             setBoards(boardsData);
+                            setLoading(false);
                             setError(null);
+                        }, (err) => {
+                            console.error("Error fetching boards:", err);
+                            setError("Failed to load teamboards.");
+                            setLoading(false);
                         });
                         return () => unsubscribeBoards();
                     }, (err) => {
                          console.error("Error fetching team rooms:", err);
                          setError("Failed to load team rooms.");
+                         setLoading(false);
                     });
                     return () => unsubscribeTeamRooms();
                 }, (err) => {
                     console.error("Error fetching workpanel:", err);
                     setError("Failed to load workpanel data.");
+                    setLoading(false);
                 });
                 
                 return () => unsubscribeWorkpanel();
             } catch (err) {
                  console.error("Error fetching accessible data:", err);
                  setError("Failed to determine your access permissions.");
-            } finally {
-                setLoading(false);
+                 setLoading(false);
             }
         };
 

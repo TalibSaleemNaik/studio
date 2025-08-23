@@ -11,10 +11,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { UserProfile } from '../board/types';
 
 interface Workpanel {
     id: string;
@@ -37,7 +38,9 @@ function CreateWorkpanelDialog({ onClose }: { onClose: () => void }) {
 
         setIsCreating(true);
         try {
-            const workpanelRef = await addDoc(collection(db, 'workspaces'), {
+            // Create the workpanel document
+            const workpanelRef = doc(collection(db, 'workspaces'));
+            await setDoc(workpanelRef, {
                 name: name,
                 ownerId: user.uid,
                 members: {
@@ -45,6 +48,12 @@ function CreateWorkpanelDialog({ onClose }: { onClose: () => void }) {
                 }
             });
             
+            // Add the new workpanel to the user's accessible list
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+                accessibleWorkpanels: arrayUnion(workpanelRef.id)
+            });
+
             // Create a default board in the new workpanel
             const boardRef = doc(collection(db, `workspaces/${workpanelRef.id}/boards`));
             await setDoc(boardRef, {
@@ -54,7 +63,9 @@ function CreateWorkpanelDialog({ onClose }: { onClose: () => void }) {
                  members: {
                      [user.uid]: 'manager'
                  },
+                 memberUids: [user.uid],
                  isPrivate: false,
+                 workpanelId: workpanelRef.id
             });
 
             toast({ title: 'Workpanel created!', description: `"${name}" is ready.` });
@@ -109,16 +120,36 @@ export function WorkpanelSwitcher({ currentWorkpanelId, currentWorkpanelName }: 
         if (!user) return;
 
         setLoading(true);
-        const q = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['owner', 'admin', 'member', 'viewer', 'guest']));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const userWorkpanels = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                name: doc.data().name
-            }));
-            setWorkpanels(userWorkpanels);
+        // Listen to the user's document for accessible workpanels
+        const userDocRef = doc(db, 'users', user.uid);
+        const unsubscribe = onSnapshot(userDocRef, async (userDocSnap) => {
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data() as UserProfile;
+                const accessibleIds = new Set(userData.accessibleWorkpanels || []);
+                
+                // Also include panels where user is a direct member, just in case
+                const directMemberQuery = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['owner', 'admin', 'member', 'viewer']));
+                const directMemberSnap = await getDocs(directMemberQuery);
+                directMemberSnap.forEach(doc => accessibleIds.add(doc.id));
+
+                if (accessibleIds.size > 0) {
+                    const workpanelDocs = await Promise.all(
+                        Array.from(accessibleIds).map(id => getDoc(doc(db, 'workspaces', id)))
+                    );
+                    const userWorkpanels = workpanelDocs
+                        .filter(doc => doc.exists())
+                        .map(doc => ({
+                            id: doc.id,
+                            name: doc.data()!.name
+                        }));
+                    setWorkpanels(userWorkpanels);
+                } else {
+                    setWorkpanels([]);
+                }
+            }
             setLoading(false);
         }, (error) => {
-            console.error("Error fetching workpanels:", error);
+            console.error("Error fetching user's workpanels:", error);
             setLoading(false);
         });
 
@@ -193,4 +224,3 @@ export function WorkpanelSwitcher({ currentWorkpanelId, currentWorkpanelName }: 
         </Dialog>
     );
 }
-
