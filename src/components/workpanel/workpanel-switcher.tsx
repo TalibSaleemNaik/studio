@@ -41,7 +41,7 @@ function CreateWorkpanelDialog({ onClose }: { onClose: () => void }) {
                 name: name,
                 ownerId: user.uid,
                 members: {
-                    [user.uid]: 'admin'
+                    [user.uid]: 'owner'
                 }
             });
             
@@ -52,7 +52,7 @@ function CreateWorkpanelDialog({ onClose }: { onClose: () => void }) {
                  description: 'This is your first board in your new workpanel!',
                  ownerId: user.uid,
                  members: {
-                     [user.uid]: 'owner'
+                     [user.uid]: 'manager'
                  },
                  isPrivate: false,
             });
@@ -109,7 +109,7 @@ export function WorkpanelSwitcher({ currentWorkpanelId, currentWorkpanelName }: 
         if (!user) return;
 
         setLoading(true);
-        const q = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['admin', 'manager', 'member']));
+        const q = query(collection(db, 'workspaces'), where(`members.${user.uid}`, 'in', ['owner', 'admin', 'member', 'viewer', 'guest']));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const userWorkpanels = querySnapshot.docs.map(doc => ({
                 id: doc.id,

@@ -18,6 +18,7 @@ import { UserProfile, WorkpanelRole } from "../board/types";
 
 interface Workpanel {
     members: { [key: string]: WorkpanelRole };
+    ownerId: string;
 }
 
 interface WorkpanelMember extends UserProfile {
@@ -132,6 +133,12 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
             return;
         }
 
+        const memberToChange = members.find(m => m.uid === memberId);
+        if (memberToChange?.role === 'owner') {
+             toast({ variant: 'destructive', title: 'The owner role cannot be changed.' });
+            return;
+        }
+
         try {
             const workpanelRef = doc(db, `workspaces/${workpanelId}`);
             await updateDoc(workpanelRef, {
@@ -145,6 +152,10 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
     };
     
     const confirmRemoveMember = (member: WorkpanelMember) => {
+        if (member.role === 'owner') {
+            toast({ variant: 'destructive', title: 'The workpanel owner cannot be removed.' });
+            return;
+        }
         if (!user || user.uid === member.uid) {
             toast({ variant: 'destructive', title: 'You cannot remove yourself.' });
             return;
@@ -224,46 +235,50 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
                 <div className="space-y-4">
                     <h3 className="text-lg font-medium">Current Members ({members.length})</h3>
                     <div className="rounded-md border">
-                        {members.map(member => (
-                            <div key={member.uid} className="flex items-center justify-between p-4 border-b last:border-b-0">
-                                <div className="flex items-center gap-4">
-                                    <Avatar className="h-10 w-10">
-                                        <AvatarImage src={member.photoURL} />
-                                        <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <p className="font-semibold">{member.displayName} {user?.uid === member.uid && "(You)"}</p>
-                                        <p className="text-sm text-muted-foreground">{member.email}</p>
+                        {members.map(member => {
+                            const isOwner = member.role === 'owner';
+                            const isSelf = user?.uid === member.uid;
+                            return (
+                                <div key={member.uid} className="flex items-center justify-between p-4 border-b last:border-b-0">
+                                    <div className="flex items-center gap-4">
+                                        <Avatar className="h-10 w-10">
+                                            <AvatarImage src={member.photoURL} />
+                                            <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <p className="font-semibold">{member.displayName} {isSelf && "(You)"}</p>
+                                            <p className="text-sm text-muted-foreground">{member.email}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Select 
+                                            value={member.role}
+                                            onValueChange={(value) => handleRoleChange(member.uid, value as WorkpanelRole)}
+                                            disabled={isOwner || isSelf}
+                                        >
+                                            <SelectTrigger className="w-[120px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="owner" disabled>Owner</SelectItem>
+                                                <SelectItem value="admin">Admin</SelectItem>
+                                                <SelectItem value="member">Member</SelectItem>
+                                                <SelectItem value="viewer">Viewer</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="text-destructive"
+                                            onClick={() => confirmRemoveMember(member)}
+                                            disabled={isOwner || isSelf}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                     <Select 
-                                        value={member.role}
-                                        onValueChange={(value) => handleRoleChange(member.uid, value as WorkpanelRole)}
-                                        disabled={user?.uid === member.uid}
-                                     >
-                                        <SelectTrigger className="w-[120px]">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="admin">Admin</SelectItem>
-                                            <SelectItem value="owner">Owner</SelectItem>
-                                            <SelectItem value="member">Member</SelectItem>
-                                            <SelectItem value="viewer">Viewer</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="text-destructive"
-                                        onClick={() => confirmRemoveMember(member)}
-                                        disabled={user?.uid === member.uid}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </div>
             </CardContent>
