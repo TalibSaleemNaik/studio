@@ -30,7 +30,7 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TableView } from './board/table-view';
 import { useSearchParams } from 'next/navigation';
 
-function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
+function BoardMembersDialog({ boardId, boardMembers, userRole, workpanelId }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
@@ -268,7 +268,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
     )
 }
 
-function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string }) {
+function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string }) {
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<BoardType | null>(null);

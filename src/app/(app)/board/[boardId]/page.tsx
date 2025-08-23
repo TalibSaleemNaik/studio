@@ -3,7 +3,7 @@ import { DynamicBoard } from "@/components/dynamic-board";
 
 type PageProps = { 
   params: { boardId: string };
-  searchParams: { workpanelId?: string };
+  searchParams: { workpanelId: string };
 };
 
 export default function BoardPage({ params, searchParams }: PageProps) {
