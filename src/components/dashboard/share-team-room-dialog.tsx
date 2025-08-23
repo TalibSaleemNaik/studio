@@ -28,7 +28,6 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
     const [isInviting, setIsInviting] = useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
-    const teamRoomMembers = teamRoom.members || {};
     
     const displayedUserUids = React.useMemo(() => {
         // Only show users who are direct members of the team room.
@@ -54,8 +53,11 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
             const userToInviteDoc = querySnapshot.docs[0];
             const userToInviteId = userToInviteDoc.id;
 
-            if (Object.keys(teamRoomMembers).includes(userToInviteId)) {
-                throw new Error("User is already a direct member of this TeamRoom.");
+            const hasDirectAccess = Object.keys(teamRoom.members || {}).includes(userToInviteId);
+            const hasInheritedAccess = Object.keys(workpanelMembers).includes(userToInviteId);
+
+            if (hasDirectAccess || hasInheritedAccess) {
+                throw new Error("User already has access to this TeamRoom.");
             }
 
             await runTransaction(db, async (transaction) => {
@@ -146,17 +148,16 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
         }
     };
     
-    const getEffectiveRole = (uid: string): TeamRoomRole | null => {
-        const directRole = teamRoomMembers[uid];
+    const getEffectiveRole = (uid: string): TeamRoomRole => {
+        const directRole = teamRoom.members?.[uid];
         if (directRole) return directRole;
 
         const workpanelRole = workpanelMembers[uid];
         if (workpanelRole) {
             if (workpanelRole === 'owner' || workpanelRole === 'admin') return 'manager';
             if (workpanelRole === 'member') return 'editor';
-            if (workpanelRole === 'viewer') return 'viewer';
         }
-        return null;
+        return 'viewer'; // Default to viewer if they are in the list but have no other role
     }
 
 
@@ -192,9 +193,8 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
                             const member = allUsers.get(uid);
                             const isCurrentUser = user?.uid === uid;
                             const effectiveRole = getEffectiveRole(uid);
-                            const isInherited = !teamRoomMembers[uid] && workpanelMembers[uid];
 
-                            if (!member || !effectiveRole) return null;
+                            if (!member) return null;
 
                             return (
                                 <div key={uid} className="flex items-center justify-between">
@@ -212,7 +212,7 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
                                         <Select
                                             value={effectiveRole}
                                             onValueChange={(value) => handleRoleChange(uid, value as TeamRoomRole)}
-                                            disabled={isCurrentUser || isInherited}
+                                            disabled={isCurrentUser}
                                         >
                                             <SelectTrigger className="w-[110px]">
                                                 <SelectValue />
@@ -223,14 +223,14 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
                                                 <SelectItem value="viewer">Viewer</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(uid)} disabled={isCurrentUser || isInherited}>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(uid)} disabled={isCurrentUser}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
                                 </div>
                             );
                         })}
-                         {displayedUserUids.length === 0 && <p className="text-sm text-muted-foreground">Only you have access to this TeamRoom.</p>}
+                         {displayedUserUids.length === 0 && <p className="text-sm text-muted-foreground">Only inherited members have access. Invite someone to manage roles directly.</p>}
                     </div>
                 </div>
             </DialogContent>
