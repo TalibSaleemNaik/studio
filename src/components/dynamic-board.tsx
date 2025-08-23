@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React from 'react';
@@ -39,8 +40,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
     if (userRole !== 'manager') return null;
 
     const handleInvite = async () => {
-        const trimmedEmail = inviteEmail.trim();
-        console.log(`Searching for user with email: ${trimmedEmail}`);
+        const trimmedEmail = inviteEmail.trim().toLowerCase();
         if (!trimmedEmail) {
             toast({ variant: 'destructive', title: 'Please enter an email address.' });
             return;
@@ -51,8 +51,6 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
             const q = query(usersRef, where('email', '==', trimmedEmail));
             const querySnapshot = await getDocs(q);
             
-            console.log(`Found ${querySnapshot.size} user(s) with that email.`);
-
             if (querySnapshot.empty) {
                 toast({ variant: 'destructive', title: 'User not found.' });
                 setIsInviting(false);
@@ -68,11 +66,26 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 setIsInviting(false);
                 return;
             }
-
+            
+            const batch = writeBatch(db);
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
-            await updateDoc(boardRef, {
+            batch.update(boardRef, {
                 [`members.${userId}`]: 'editor'
             });
+
+            // Grant guest access to workpanel if not already a member
+            const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+            const workpanelSnap = await getDoc(workpanelRef);
+            if (workpanelSnap.exists()) {
+                const workpanelData = workpanelSnap.data() as { members: { [key: string]: WorkpanelRole } };
+                if (!workpanelData.members[userId]) {
+                     batch.update(workpanelRef, {
+                        [`members.${userId}`]: 'guest'
+                    });
+                }
+            }
+            
+            await batch.commit();
             
             if (user) {
                  const simpleUser: SimpleUser = {
@@ -94,8 +107,13 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
         }
     };
     
-    const handleRoleChange = async (memberId: string, newRole: 'editor' | 'viewer' | 'manager') => {
-        if (newRole === 'manager') return; // Should have a separate "transfer ownership" flow
+    const handleRoleChange = async (memberId: string, newRole: BoardRole) => {
+        const isSelf = user?.uid === memberId;
+        if (isSelf) {
+            toast({variant: 'destructive', title: 'You cannot change your own role.'});
+            return;
+        }
+
         try {
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             await updateDoc(boardRef, {
@@ -109,6 +127,12 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
     };
     
     const handleRemoveMember = async (memberId: string) => {
+        const isSelf = user?.uid === memberId;
+         if (isSelf) {
+            toast({variant: 'destructive', title: 'You cannot remove yourself.'});
+            return;
+        }
+
         try {
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             const memberToRemove = boardMembers.find(m => m.uid === memberId);
@@ -169,31 +193,29 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                                         <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
                                     </Avatar>
                                     <div>
-                                        <p className="font-semibold">{member.displayName}</p>
+                                        <p className="font-semibold">{member.displayName} {user?.uid === member.uid && "(You)"}</p>
                                         <p className="text-sm text-muted-foreground">{member.email}</p>
                                     </div>
                                 </div>
-                                {member.role !== 'manager' ? (
-                                    <div className="flex items-center gap-2">
-                                        <Select 
-                                            value={member.role}
-                                            onValueChange={(value) => handleRoleChange(member.uid, value as 'editor' | 'viewer')}
-                                        >
-                                            <SelectTrigger className="w-[110px]">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="editor">Editor</SelectItem>
-                                                <SelectItem value="viewer">Viewer</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveMember(member.uid)}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <span className="text-sm text-muted-foreground pr-4">Manager</span>
-                                )}
+                                <div className="flex items-center gap-2">
+                                    <Select 
+                                        value={member.role}
+                                        onValueChange={(value) => handleRoleChange(member.uid, value as BoardRole)}
+                                        disabled={user?.uid === member.uid}
+                                    >
+                                        <SelectTrigger className="w-[110px]">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="manager">Manager</SelectItem>
+                                            <SelectItem value="editor">Editor</SelectItem>
+                                            <SelectItem value="viewer">Viewer</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(member.uid)} disabled={user?.uid === member.uid}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -281,36 +303,47 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         teamRoomData: TeamRoomType | null,
         workpanelData: { members: { [key: string]: WorkpanelRole } } | null
     ): BoardRole => {
-        // Highest priority: direct board role
+        const roleHierarchy: BoardRole[] = ['viewer', 'editor', 'manager'];
+        
+        const roles: BoardRole[] = [];
+
+        // Direct board role
         if (boardData.members[uid]) {
             const directRole = boardData.members[uid];
-            if (directRole === 'manager' || directRole === 'editor' || directRole === 'viewer') {
-                return directRole;
+            if (roleHierarchy.includes(directRole)) {
+                roles.push(directRole);
             }
         }
 
-        // Second priority: TeamRoom role
+        // TeamRoom role inheritance
         if (teamRoomData?.members[uid]) {
             const teamRoomRole = teamRoomData.members[uid];
-            if (teamRoomRole === 'manager') return 'manager';
-            if (teamRoomRole === 'editor') return 'editor';
-            if (teamRoomRole === 'viewer') return 'viewer';
+            if (teamRoomRole === 'manager') roles.push('manager');
+            if (teamRoomRole === 'editor') roles.push('editor');
+            if (teamRoomRole === 'viewer') roles.push('viewer');
         }
         
-        // Third priority: Workpanel role
+        // Workpanel role inheritance
         if (workpanelData?.members[uid]) {
             const workpanelRole = workpanelData.members[uid];
-            if (workpanelRole === 'owner' || workpanelRole === 'admin') return 'manager';
-            if (workpanelRole === 'member') return 'editor';
-            if (workpanelRole === 'viewer') return 'viewer';
+            if (workpanelRole === 'owner' || workpanelRole === 'admin') roles.push('manager');
+            if (workpanelRole === 'member') roles.push('editor');
+            if (workpanelRole === 'viewer') roles.push('viewer');
         }
         
-        // Final check for non-private boards within a workpanel the user is part of
-        if (!boardData.isPrivate && workpanelData?.members[uid]) {
-            return 'viewer';
+        if (roles.length === 0) {
+            return 'guest';
         }
 
-        return 'guest';
+        // Return the highest-level role from the collected roles
+        let highestRole: BoardRole = 'guest';
+        for (const role of roles) {
+            if (roleHierarchy.indexOf(role) > roleHierarchy.indexOf(highestRole)) {
+                highestRole = role;
+            }
+        }
+
+        return highestRole;
     }, []);
 
   React.useEffect(() => {
@@ -335,7 +368,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         setBoard(boardData);
         setError(null);
         
-        // Fetch related entities for permission checking
         const workpanelRef = doc(db, `workspaces/${workpanelId}`);
         const workpanelSnap = await getDoc(workpanelRef);
         const workpanelData = workpanelSnap.exists() ? workpanelSnap.data() as { members: { [key: string]: WorkpanelRole } } : null;
@@ -348,13 +380,13 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         }
         
         const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
-        setUserRole(effectiveRole);
-
-        if (effectiveRole === 'guest' && !boardData.isPrivate) {
+        
+        if (effectiveRole === 'guest') {
              setError("You do not have permission to view this board.");
              setLoading(false);
              return;
         }
+        setUserRole(effectiveRole);
 
 
         const memberUIDs = Object.keys(boardData.members || {});
@@ -437,7 +469,11 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
     
     // Role-based drag-and-drop validation
     if (userRole === 'viewer') return;
-    if (userRole === 'editor') {
+    if (type === 'COLUMN' && userRole !== 'manager') {
+        toast({ variant: "destructive", title: "Permission Denied", description: "Only managers can reorder columns." });
+        return;
+    }
+    if (type === 'TASK' && userRole === 'editor') {
         const task = allTasks.find(t => t.id === draggableId);
         if (!task || !task.assignees?.includes(user.uid)) {
             toast({ variant: "destructive", title: "Permission Denied", description: "You can only move tasks assigned to you." });
@@ -448,7 +484,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
     const newColumnsState = { ...columns };
 
     if (type === 'COLUMN') {
-        if (userRole !== 'manager') return;
         const orderedColumns = Object.values(newColumnsState).sort((a,b) => a.order - b.order);
         const [movedColumn] = orderedColumns.splice(source.index, 1);
         orderedColumns.splice(destination.index, 0, movedColumn);

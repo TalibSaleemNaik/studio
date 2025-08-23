@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -46,6 +47,7 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
     const { toast } = useToast();
     const teamRoomMembers = teamRoom.members || {};
     const teamRoomMemberUids = Object.keys(teamRoomMembers);
+    const { user } = useAuth();
 
     const handleInvite = async () => {
         const trimmedEmail = inviteEmail.trim().toLowerCase();
@@ -63,14 +65,32 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                 throw new Error("User with that email not found.");
             }
             const userToInvite = querySnapshot.docs[0];
-            if (teamRoomMemberUids.includes(userToInvite.id)) {
+            const userToInviteId = userToInvite.id;
+
+            if (teamRoomMemberUids.includes(userToInviteId)) {
                 throw new Error("User is already a member of this TeamRoom.");
             }
 
+            const batch = writeBatch(db);
             const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
-            await updateDoc(teamRoomRef, {
-                [`members.${userToInvite.id}`]: 'editor' // Default role
+            batch.update(teamRoomRef, {
+                [`members.${userToInviteId}`]: 'editor' // Default role
             });
+
+            // Grant guest access to workpanel if not already a member
+            const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+            const workpanelSnap = await getDoc(workpanelRef);
+            if (workpanelSnap.exists()) {
+                const workpanelData = workpanelSnap.data() as Workpanel;
+                if (!workpanelData.members[userToInviteId]) {
+                     batch.update(workpanelRef, {
+                        [`members.${userToInviteId}`]: 'guest'
+                    });
+                }
+            }
+            
+            await batch.commit();
+
             toast({ title: "User invited to TeamRoom!" });
             setInviteEmail('');
             onUpdate();
@@ -82,6 +102,10 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
     };
 
     const handleRoleChange = async (memberId: string, newRole: TeamRoomRole) => {
+        if(user?.uid === memberId) {
+            toast({variant: 'destructive', title: 'You cannot change your own role.'});
+            return;
+        }
         try {
             const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
             await updateDoc(teamRoomRef, { [`members.${memberId}`]: newRole });
@@ -93,6 +117,10 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
     };
 
     const handleRemoveMember = async (memberId: string) => {
+        if(user?.uid === memberId) {
+            toast({variant: 'destructive', title: 'You cannot remove yourself.'});
+            return;
+        }
         try {
             const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, teamRoom.id);
             await updateDoc(teamRoomRef, { [`members.${memberId}`]: deleteField() });
@@ -133,6 +161,7 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                         <h4 className="font-medium">People with access</h4>
                         {teamRoomMemberUids.map(uid => {
                             const member = allUsers.get(uid);
+                            const isCurrentUser = user?.uid === uid;
                             return member ? (
                                 <div key={uid} className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -141,7 +170,7 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                                             <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
                                         </Avatar>
                                         <div>
-                                            <p className="font-semibold">{member.displayName}</p>
+                                            <p className="font-semibold">{member.displayName} {isCurrentUser && '(You)'}</p>
                                             <p className="text-sm text-muted-foreground">{member.email}</p>
                                         </div>
                                     </div>
@@ -149,6 +178,7 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                                         <Select
                                             value={teamRoomMembers[uid]}
                                             onValueChange={(value) => handleRoleChange(uid, value as TeamRoomRole)}
+                                            disabled={isCurrentUser}
                                         >
                                             <SelectTrigger className="w-[110px]">
                                                 <SelectValue />
@@ -159,7 +189,7 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                                                 <SelectItem value="viewer">Viewer</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(uid)}>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(uid)} disabled={isCurrentUser}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
@@ -262,7 +292,7 @@ function CreateBoardDialog({ workpanelId, teamRoomId, onBoardCreated }: { workpa
             const batch = writeBatch(db);
             const boardRef = doc(collection(db, `workspaces/${workpanelId}/boards`));
             
-            const boardMembers = { [user.uid]: 'owner' };
+            const boardMembers = { [user.uid]: 'manager' };
 
             batch.set(boardRef, {
                 name: title,
@@ -495,9 +525,8 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                 const teamRoomsData = teamRoomsSnapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom))
                     .filter(teamRoom => {
-                        if (userWorkpanelRole === 'owner' || userWorkpanelRole === 'admin' || userWorkpanelRole === 'member' || userWorkpanelRole === 'viewer') return true;
+                        if (['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole)) return true;
                         if (teamRoom.members && user.uid && teamRoom.members[user.uid]) return true;
-                        if(userWorkpanelRole === 'guest') return false;
                         return false;
                     });
                 setTeamRooms(teamRoomsData);
@@ -633,9 +662,9 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     }
 
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
-    const canCreate = currentUserRole === 'admin' || currentUserRole === 'owner';
+    const canCreate = currentUserRole === 'admin' || currentUserRole === 'owner' || currentUserRole === 'member';
 
-    const renderBoardGrid = (boardsToRender: Board[], teamRoomId: string) => {
+    const renderBoardGrid = (boardsToRender: Board[], teamRoomId: string, canCreateBoardsInRoom: boolean) => {
         return (
             <Droppable droppableId={teamRoomId} type="BOARD">
                 {(provided, snapshot) => (
@@ -651,7 +680,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                             const boardMembers = Object.keys(board.members)
                                 .map(uid => allUsers.get(uid))
                                 .filter((u): u is UserProfile => !!u);
-                            const canDelete = currentUserRole === 'admin' || (user?.uid === board.ownerId);
+                            const canDelete = currentUserRole === 'owner' || currentUserRole === 'admin' || (user?.uid === board.ownerId);
 
                             return (
                                 <Draggable key={board.id} draggableId={board.id} index={index}>
@@ -676,7 +705,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                             );
                         })}
                         {provided.placeholder}
-                        {canCreate && <CreateBoardDialog workpanelId={workpanelId} teamRoomId={teamRoomId === 'unassigned' ? '' : teamRoomId} onBoardCreated={() => {}} />}
+                        {canCreateBoardsInRoom && <CreateBoardDialog workpanelId={workpanelId} teamRoomId={teamRoomId === 'unassigned' ? '' : teamRoomId} onBoardCreated={() => {}} />}
                     </div>
                 )}
             </Droppable>
@@ -691,25 +720,30 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                 </div>
             )}
             <Accordion type="multiple" defaultValue={teamRooms.map(f => f.id)} className="w-full space-y-4">
-                 {teamRooms.map(teamRoom => (
-                    <AccordionItem value={teamRoom.id} key={teamRoom.id} className="border rounded-lg bg-card">
-                         <div className="flex items-center justify-between px-4 py-3 rounded-t-lg data-[state=open]:border-b hover:bg-muted/50">
-                            <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
-                               <span>{teamRoom.name}</span>
-                            </AccordionTrigger>
-                            <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={()=>{}} />
-                        </div>
-                        <AccordionContent className="pt-4 px-2">
-                             {renderBoardGrid(boardsByTeamRoom[teamRoom.id] || [], teamRoom.id)}
-                        </AccordionContent>
-                    </AccordionItem>
-                ))}
+                 {teamRooms.map(teamRoom => {
+                    const userTeamRoomRole = user?.uid ? teamRoom.members?.[user.uid] : undefined;
+                    const canCreateBoardsInRoom = canCreate || userTeamRoomRole === 'manager' || userTeamRoomRole === 'editor';
+                     
+                    return (
+                        <AccordionItem value={teamRoom.id} key={teamRoom.id} className="border rounded-lg bg-card">
+                            <div className="flex items-center justify-between px-4 py-3 rounded-t-lg data-[state=open]:border-b hover:bg-muted/50">
+                                <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
+                                <span>{teamRoom.name}</span>
+                                </AccordionTrigger>
+                                <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={()=>{}} />
+                            </div>
+                            <AccordionContent className="pt-4 px-2">
+                                {renderBoardGrid(boardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
+                            </AccordionContent>
+                        </AccordionItem>
+                    )
+                })}
             </Accordion>
            
             {(unassignedBoards.length > 0 || teamRooms.length === 0) && (
                 <div className="mt-8">
                     <h2 className="text-xl font-headline font-semibold mb-4">Uncategorized Boards</h2>
-                    {renderBoardGrid(unassignedBoards, 'unassigned')}
+                    {renderBoardGrid(unassignedBoards, 'unassigned', canCreate)}
                 </div>
             )}
             
