@@ -27,7 +27,7 @@ import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
-import { TableView } from './board/table-view';
+import { TableView } from './table-view';
 import { useSearchParams } from 'next/navigation';
 
 function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {

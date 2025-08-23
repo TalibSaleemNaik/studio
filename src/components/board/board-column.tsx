@@ -217,8 +217,8 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
     const color = columnColors[index % columnColors.length];
     const { user } = useAuth();
     
-    // An editor can only drop a task into a column if they are assigned to that task.
     // A manager can drop any task anywhere.
+    // An editor can also drop anywhere, but the individual task cards will control if they can be picked up.
     const isDroppable = (userRole === 'manager') || (userRole === 'editor');
     
     return (
@@ -279,5 +279,3 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
         </Draggable>
     );
 }
-
-    
