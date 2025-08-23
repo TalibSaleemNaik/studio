@@ -141,15 +141,14 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 // --- READS FIRST ---
                 
                 // 1. Get the board document to find its parent workpanelId.
-                const preadBoardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
-                const boardDataSnap = await transaction.get(preadBoardRef);
+                const currentBoardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+                const boardDataSnap = await transaction.get(currentBoardRef);
                 const boardWorkpanelId = boardDataSnap.data()?.workpanelId;
 
                 if (!boardWorkpanelId) {
                     throw new Error("Could not determine the workpanel for this board.");
                 }
                 
-                const boardRef = doc(db, `workspaces/${boardWorkpanelId}/boards`, boardId);
                 const userDocRef = doc(db, 'users', memberId);
                 const workpanelDoc = await transaction.get(doc(db, 'workspaces', boardWorkpanelId));
                 if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
@@ -169,7 +168,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
 
                 // --- WRITES LAST ---
                 // 1. Remove user from board
-                transaction.update(boardRef, {
+                transaction.update(currentBoardRef, {
                     [`members.${memberId}`]: deleteField(),
                     memberUids: arrayRemove(memberId)
                 });
