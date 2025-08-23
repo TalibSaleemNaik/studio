@@ -678,12 +678,12 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             <Accordion type="multiple" defaultValue={folders.map(f => f.id)} className="w-full space-y-4">
                  {folders.map(folder => (
                     <AccordionItem value={folder.id} key={folder.id} className="border rounded-lg bg-card">
-                         <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline px-4 py-3 rounded-t-lg hover:bg-muted/50 data-[state=open]:border-b">
-                           <div className="flex items-center justify-between w-full">
+                         <div className="flex items-center justify-between px-4 py-3 rounded-t-lg data-[state=open]:border-b hover:bg-muted/50">
+                            <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left">
                                <span>{folder.name}</span>
-                               <ShareFolderDialog workpanelId={workpanelId} folder={folder} allUsers={allUsers} onUpdate={()=>{}} />
-                           </div>
-                        </AccordionTrigger>
+                            </AccordionTrigger>
+                            <ShareFolderDialog workpanelId={workpanelId} folder={folder} allUsers={allUsers} onUpdate={()=>{}} />
+                        </div>
                         <AccordionContent className="pt-4 px-2">
                              {renderBoardGrid(boardsByFolder[folder.id] || [], folder.id)}
                         </AccordionContent>
@@ -720,3 +720,5 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
         </DragDropContext>
     )
 }
+
+    
