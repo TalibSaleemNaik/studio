@@ -27,7 +27,7 @@
       "fields": [
         {
           "fieldPath": "members",
-          "arrayConfig": "CONTAINS"
+          "order": "ASCENDING"
         }
       ]
     }
