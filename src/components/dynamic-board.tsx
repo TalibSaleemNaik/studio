@@ -128,22 +128,30 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
         try {
             const memberToRemove = boardMembers.find(m => m.uid === memberId);
             if (!memberToRemove) throw new Error("Member not found");
+            
+            const boardDataSnap = await getDoc(doc(db, `workspaces/${workpanelId}/boards`, boardId));
+            const boardWorkpanelId = boardDataSnap.data()?.workpanelId;
+            
+            if(!boardWorkpanelId) {
+                 toast({ variant: 'destructive', title: 'Could not identify the workpanel for this board.'});
+                 return;
+            }
 
             await runTransaction(db, async (transaction) => {
-                const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+                const boardRef = doc(db, `workspaces/${boardWorkpanelId}/boards`, boardId);
                 const userDocRef = doc(db, 'users', memberId);
 
                 // --- READS FIRST ---
-                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
+                const workpanelDoc = await transaction.get(doc(db, 'workspaces', boardWorkpanelId));
                 if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
 
                 // Check other boards
-                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+                const boardsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/boards`), where('memberUids', 'array-contains', memberId));
                 const boardsSnap = await transaction.get(boardsQuery);
                 const otherBoardAccess = boardsSnap.docs.filter(d => d.id !== boardId).length > 0;
 
                 // Check teamrooms
-                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+                const teamRoomsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
                 const teamRoomsSnap = await transaction.get(teamRoomsQuery);
                 const teamRoomAccess = teamRoomsSnap.size > 0;
                 
@@ -162,7 +170,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 // 2. If no other access found, remove from accessibleWorkpanels
                 if (!hasOtherAccess) {
                     transaction.update(userDocRef, {
-                        accessibleWorkpanels: arrayRemove(workpanelId)
+                        accessibleWorkpanels: arrayRemove(boardWorkpanelId)
                     });
                 }
             });
@@ -173,7 +181,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                await logActivity(boardWorkpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
             }
 
             toast({ title: 'Member removed.' });
