@@ -1,3 +1,4 @@
+
 {
   "indexes": [
     {
@@ -12,6 +13,16 @@
     },
     {
       "collectionGroup": "boards",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "members",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "teamRooms",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
