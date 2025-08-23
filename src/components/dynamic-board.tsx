@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React from 'react';
@@ -28,6 +29,7 @@ import { ActivityDrawer } from './board/activity-drawer';
 import { isAfter, isBefore, addDays, startOfToday } from 'date-fns';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TableView } from './board/table-view';
+import { useSearchParams } from 'next/navigation';
 
 function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
@@ -145,29 +147,33 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
         }
 
         try {
+             // --- PRE-FLIGHT QUERIES (outside transaction) ---
+            const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+            const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+
+            const [boardsSnap, teamRoomsSnap] = await Promise.all([
+                getDocs(boardsQuery),
+                getDocs(teamRoomsQuery),
+            ]);
+
+            const otherBoardAccess = boardsSnap.docs.filter(d => d.id !== boardId).length > 0;
+            const teamRoomAccess = teamRoomsSnap.size > 0;
+
+
             await runTransaction(db, async (transaction) => {
                 const currentBoardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
-
-                // --- ALL READS FIRST ---
-                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
-                if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
-
-                // 1. Check for other access points
-                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
-                const boardsSnap = await transaction.get(boardsQuery);
-                const otherBoardAccess = boardsSnap.docs.filter(d => d.id !== boardId).length > 0;
-
-                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
-                const teamRoomsSnap = await transaction.get(teamRoomsQuery);
-                const teamRoomAccess = teamRoomsSnap.size > 0;
-                
-                const workpanelMemberAccess = !!workpanelDoc.data().members[memberId];
-                
-                const hasOtherAccess = otherBoardAccess || teamRoomAccess || workpanelMemberAccess;
-                
+                const workpanelRef = doc(db, 'workspaces', workpanelId);
                 const userDocRef = doc(db, 'users', memberId);
 
-                // --- ALL WRITES LAST ---
+                // --- READS (inside transaction) ---
+                const workpanelDoc = await transaction.get(workpanelRef);
+                if (!workpanelDoc.exists()) {
+                    throw new Error("Workpanel not found.");
+                }
+                const workpanelMemberAccess = !!workpanelDoc.data().members[memberId];
+                const hasOtherAccess = otherBoardAccess || teamRoomAccess || workpanelMemberAccess;
+
+                // --- WRITES (inside transaction) ---
                 // 1. Remove user from board
                 transaction.update(currentBoardRef, {
                     [`members.${memberId}`]: deleteField(),
@@ -845,3 +851,4 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
