@@ -87,13 +87,13 @@ function ChecklistProgressCircle({ task }: { task: Task }) {
     );
 }
 
-export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; index: number; boardMembers: BoardMember[]; onClick: () => void; }) {
+export function TaskCard({ task, index, boardMembers, onClick, isDraggable }: { task: Task; index: number; boardMembers: BoardMember[]; onClick: () => void; isDraggable: boolean; }) {
     
     const getAssignee = (uid: string) => boardMembers.find(m => m.uid === uid);
     const pConfig = task.priority ? priorityConfig[task.priority] : null;
 
     return (
-        <Draggable draggableId={task.id} index={index}>
+        <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable}>
             {(provided, snapshot) => (
                 <div
                     ref={provided.innerRef}
@@ -103,7 +103,8 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
                      className={cn(
                         "rounded-xl p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
                         snapshot.isDragging && "shadow-xl scale-105",
-                        pConfig ? pConfig : "bg-border"
+                        pConfig ? pConfig : "bg-border",
+                        !isDraggable && 'cursor-not-allowed'
                     )}
                     style={{
                         ...provided.draggableProps.style
@@ -151,4 +152,5 @@ export function TaskCard({ task, index, boardMembers, onClick }: { task: Task; i
         </Draggable>
     );
 }
+
 

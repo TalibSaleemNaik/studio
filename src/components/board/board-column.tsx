@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Draggable, Droppable } from '@hello-pangea/dnd';
-import { MoreHorizontal, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Edit, Trash2, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -13,13 +13,13 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, writeBatch, collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Task, Column, BoardMember } from './types';
+import { Task, Column, BoardMember, BoardRole } from './types';
 import { TaskCard } from './task-card';
 import { useAuth } from '@/hooks/use-auth';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 
 
-function ColumnMenu({ column, workpanelId, boardId }: { column: Column, workpanelId: string, boardId: string}) {
+function ColumnMenu({ column, workpanelId, boardId, userRole }: { column: Column, workpanelId: string, boardId: string, userRole: BoardRole }) {
     const { toast } = useToast();
     const { user } = useAuth();
     const [isRenameOpen, setIsRenameOpen] = React.useState(false);
@@ -27,10 +27,12 @@ function ColumnMenu({ column, workpanelId, boardId }: { column: Column, workpane
     const [originalName, setOriginalName] = React.useState(column.name);
     const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
     const [isDeleting, setIsDeleting] = React.useState(false);
+    
+    const canEdit = userRole === 'manager';
 
     const handleRename = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newName.trim() || newName === column.name || !user) {
+        if (!canEdit || !newName.trim() || newName === column.name || !user) {
             setIsRenameOpen(false);
             return;
         }
@@ -53,7 +55,7 @@ function ColumnMenu({ column, workpanelId, boardId }: { column: Column, workpane
     }
 
     const handleDelete = async () => {
-        if (!user) return;
+        if (!canEdit || !user) return;
         setIsDeleting(true);
         const batch = writeBatch(db);
         
@@ -86,6 +88,10 @@ function ColumnMenu({ column, workpanelId, boardId }: { column: Column, workpane
             setIsDeleting(false);
             setIsConfirmOpen(false);
         }
+    }
+
+    if (!canEdit) {
+        return null;
     }
 
     return (
@@ -143,10 +149,14 @@ function ColumnMenu({ column, workpanelId, boardId }: { column: Column, workpane
     )
 }
 
-function QuickAdd({ column, workpanelId, boardId }: { column: Column, workpanelId: string, boardId: string }) {
+function QuickAdd({ column, workpanelId, boardId, userRole }: { column: Column, workpanelId: string, boardId: string, userRole: BoardRole }) {
     const [content, setContent] = React.useState('');
     const { toast } = useToast();
     const { user } = useAuth();
+    
+    if (userRole === 'viewer') {
+        return null;
+    }
 
     const handleCreateTask = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -160,6 +170,8 @@ function QuickAdd({ column, workpanelId, boardId }: { column: Column, workpanelI
                 content: content,
                 order: column.items.length,
                 createdAt: serverTimestamp(),
+                // If editor creates a task, assign it to them by default
+                assignees: userRole === 'editor' ? [user.uid] : [],
             });
 
             if(user) {
@@ -201,11 +213,16 @@ const columnColors = [
     'bg-indigo-500',
 ];
 
-export function BoardColumn({ column, index, boardMembers, onTaskClick, workpanelId, boardId }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workpanelId: string; boardId: string; }) {
+export function BoardColumn({ column, index, boardMembers, onTaskClick, workpanelId, boardId, userRole }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workpanelId: string; boardId: string; userRole: BoardRole; }) {
     const color = columnColors[index % columnColors.length];
+    const { user } = useAuth();
+    
+    // An editor can only drop a task into a column if they are assigned to that task.
+    // A manager can drop any task anywhere.
+    const isDroppable = (userRole === 'manager') || (userRole === 'editor');
     
     return (
-        <Draggable draggableId={column.id} index={index}>
+        <Draggable draggableId={column.id} index={index} isDragDisabled={userRole !== 'manager'}>
             {(provided) => (
                 <div
                     ref={provided.innerRef}
@@ -222,9 +239,9 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                 <h2 className="text-md font-semibold text-foreground/90">{column.name}</h2>
                                 <span className="text-sm font-medium bg-background px-2 py-0.5 rounded-md text-muted-foreground">{column.items.length}</span>
                             </div>
-                            <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} />
+                            <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                         </div>
-                        <Droppable droppableId={column.id} type="TASK">
+                        <Droppable droppableId={column.id} type="TASK" isDropDisabled={!isDroppable}>
                             {(provided, snapshot) => (
                                 <div
                                     ref={provided.innerRef}
@@ -237,18 +254,22 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                         'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 min-h-[1px]',
                                         snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
                                     )}>
-                                        {column.items.map((item, index) => (
-                                            <TaskCard
-                                                key={item.id}
-                                                task={item}
-                                                index={index}
-                                                boardMembers={boardMembers}
-                                                onClick={() => onTaskClick(item)}
-                                            />
-                                        ))}
+                                        {column.items.map((item, index) => {
+                                            const isDraggable = userRole === 'manager' || (userRole === 'editor' && item.assignees?.includes(user!.uid));
+                                            return (
+                                                <TaskCard
+                                                    key={item.id}
+                                                    task={item}
+                                                    index={index}
+                                                    boardMembers={boardMembers}
+                                                    onClick={() => onTaskClick(item)}
+                                                    isDraggable={isDraggable}
+                                                />
+                                            );
+                                        })}
                                         {provided.placeholder}
                                     </div>
-                                    <QuickAdd column={column} workpanelId={workpanelId} boardId={boardId} />
+                                    <QuickAdd column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                                 </div>
                             )}
                         </Droppable>

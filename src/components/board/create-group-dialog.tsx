@@ -12,13 +12,18 @@ import { db } from '@/lib/firebase';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
+import { BoardRole } from './types';
 
-export function CreateGroupDialog({ workpanelId, boardId, columnCount }: { workpanelId: string, boardId: string, columnCount: number }) {
+export function CreateGroupDialog({ workpanelId, boardId, columnCount, userRole }: { workpanelId: string, boardId: string, columnCount: number, userRole: BoardRole }) {
     const [name, setName] = React.useState('');
     const [isCreating, setIsCreating] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
+    
+    if (userRole !== 'manager') {
+        return null;
+    }
 
     const handleCreateGroup = async (e: React.FormEvent) => {
         e.preventDefault();

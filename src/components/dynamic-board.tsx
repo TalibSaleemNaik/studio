@@ -19,7 +19,7 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Checkbox } from './ui/checkbox';
-import { Task, Columns, BoardMember, Board as BoardType, TeamRoom as TeamRoomType } from './board/types';
+import { Task, Columns, BoardMember, Board as BoardType, TeamRoom as TeamRoomType, WorkpanelRole, TeamRoomRole, BoardRole } from './board/types';
 import { TaskDetailsDrawer } from './board/task-details-drawer';
 import { CreateGroupDialog } from './board/create-group-dialog';
 import { BoardColumn } from './board/board-column';
@@ -30,11 +30,13 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TableView } from './board/table-view';
 import { useSearchParams } from 'next/navigation';
 
-function BoardMembersDialog({ workpanelId, boardId, boardMembers }: { workpanelId: string, boardId: string, boardMembers: BoardMember[] }) {
+function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
+    
+    if (userRole !== 'manager') return null;
 
     const handleInvite = async () => {
         const trimmedEmail = inviteEmail.trim();
@@ -205,6 +207,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
   const { user } = useAuth();
   const [columns, setColumns] = React.useState<Columns | null>(null);
   const [board, setBoard] = React.useState<BoardType | null>(null);
+  const [userRole, setUserRole] = React.useState<BoardRole>('guest');
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
@@ -222,7 +225,13 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
   const filteredTasks = React.useMemo(() => {
     const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
     
-    return allTasks.filter(item => {
+    let tasksToFilter = allTasks;
+    // If user is a viewer, they only see tasks assigned to them
+    if (userRole === 'viewer' && user) {
+        tasksToFilter = allTasks.filter(item => item.assignees?.includes(user.uid));
+    }
+
+    return tasksToFilter.filter(item => {
         const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
         
         const assigneeMatch = selectedAssignees.length === 0 || 
@@ -247,7 +256,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         
         return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
     });
-  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
+  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter, userRole, user]);
 
   const filteredColumns = React.useMemo(() => {
       if (!columns) return {};
@@ -261,6 +270,34 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
         ])
       );
   }, [columns, filteredTasks]);
+
+    const calculateEffectiveRole = React.useCallback((
+        uid: string,
+        boardData: BoardType,
+        teamRoomData: TeamRoomType | null,
+        workpanelData: { members: { [key: string]: WorkpanelRole } } | null
+    ): BoardRole => {
+        // Highest priority: direct board role
+        if (boardData.members[uid]) return boardData.members[uid];
+
+        // Second priority: TeamRoom role
+        if (teamRoomData?.members[uid]) {
+            const teamRoomRole = teamRoomData.members[uid];
+            if (teamRoomRole === 'manager') return 'manager';
+            if (teamRoomRole === 'editor') return 'editor';
+            if (teamRoomRole === 'viewer') return 'viewer';
+        }
+        
+        // Third priority: Workpanel role
+        if (workpanelData?.members[uid]) {
+            const workpanelRole = workpanelData.members[uid];
+            if (workpanelRole === 'owner' || workpanelRole === 'admin') return 'manager';
+            if (workpanelRole === 'member') return 'editor';
+            if (workpanelRole === 'viewer') return 'viewer';
+        }
+
+        return 'guest';
+    }, []);
 
   React.useEffect(() => {
     if (!user || !boardId || !workpanelId) {
@@ -280,47 +317,41 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
             setLoading(false);
             return;
         }
-
-        const boardData = boardSnap.data() as BoardType;
-
-        // Check permissions
+        const boardData = { id: boardSnap.id, ...boardSnap.data() as BoardType };
+        setBoard(boardData);
+        setError(null);
+        
+        // Fetch related entities for permission checking
         const workpanelRef = doc(db, `workspaces/${workpanelId}`);
         const workpanelSnap = await getDoc(workpanelRef);
-        if (!workpanelSnap.exists()) {
-             setError("Workpanel not found.");
-             setLoading(false);
-             return;
-        }
-        const workpanelData = workpanelSnap.data();
-        const userWorkpanelRole = workpanelData?.members[user.uid];
+        const workpanelData = workpanelSnap.exists() ? workpanelSnap.data() as { members: { [key: string]: WorkpanelRole } } : null;
 
-        let hasTeamRoomAccess = false;
-        if(boardData.teamRoomId){
-            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms/${boardData.teamRoomId}`);
+        let teamRoomData: TeamRoomType | null = null;
+        if (boardData.teamRoomId) {
+            const teamRoomRef = doc(db, `workspaces/${workpanelId}/teamRooms`, boardData.teamRoomId);
             const teamRoomSnap = await getDoc(teamRoomRef);
-            if(teamRoomSnap.exists()){
-                const teamRoomData = teamRoomSnap.data() as TeamRoomType;
-                if(teamRoomData.members && teamRoomData.members[user.uid]){
-                    hasTeamRoomAccess = true;
+            teamRoomData = teamRoomSnap.exists() ? teamRoomSnap.data() as TeamRoomType : null;
+        }
+        
+        const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
+        setUserRole(effectiveRole);
+
+        if (effectiveRole === 'guest') {
+            if (!boardData.isPrivate) {
+                // This case should ideally be handled by dashboard logic, but as a safeguard:
+                const isWorkpanelPublicMember = ['owner', 'admin', 'member', 'viewer'].includes(workpanelData?.members[user.uid] || 'guest');
+                if (!isWorkpanelPublicMember) {
+                    setError("You do not have permission to view this board.");
+                    setLoading(false);
+                    return;
                 }
+            } else {
+                 setError("You do not have permission to view this private board.");
+                 setLoading(false);
+                 return;
             }
         }
 
-        const canViewViaWorkpanel = ['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole);
-        const hasDirectAccess = boardData.members && boardData.members[user.uid];
-
-        const hasPermission = !boardData.isPrivate 
-                                ? (canViewViaWorkpanel || hasTeamRoomAccess)
-                                : hasDirectAccess;
-
-        if (!hasPermission) {
-            setError("You do not have permission to view this board.");
-            setLoading(false);
-            return;
-        }
-        
-        setBoard({ id: boardSnap.id, ...boardData });
-        setError(null);
 
         const memberUIDs = Object.keys(boardData.members || {});
         try {
@@ -394,15 +425,26 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
     return () => {
         unsubscribeBoard();
     };
-}, [user, boardId, workpanelId, toast]);
+}, [user, boardId, workpanelId, toast, calculateEffectiveRole]);
 
   const onDragEnd = async (result: DropResult) => {
-    const { source, destination, type } = result;
+    const { source, destination, type, draggableId } = result;
     if (!destination || !columns || !user || !workpanelId) return;
+    
+    // Role-based drag-and-drop validation
+    if (userRole === 'viewer') return;
+    if (userRole === 'editor') {
+        const task = allTasks.find(t => t.id === draggableId);
+        if (!task || !task.assignees?.includes(user.uid)) {
+            toast({ variant: "destructive", title: "Permission Denied", description: "You can only move tasks assigned to you." });
+            return;
+        }
+    }
 
     const newColumnsState = { ...columns };
 
     if (type === 'COLUMN') {
+        if (userRole !== 'manager') return;
         const orderedColumns = Object.values(newColumnsState).sort((a,b) => a.order - b.order);
         const [movedColumn] = orderedColumns.splice(source.index, 1);
         orderedColumns.splice(destination.index, 0, movedColumn);
@@ -631,12 +673,13 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                     <History className="mr-2 h-4 w-4" />
                     Activity
                 </Button>
-                <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} />
+                <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} userRole={userRole} />
                  {activeView === 'kanban' && (
                     <CreateGroupDialog 
                         workpanelId={workpanelId}
                         boardId={boardId}
                         columnCount={orderedColumns.length}
+                        userRole={userRole}
                     />
                 )}
             </div>
@@ -650,6 +693,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                 isOpen={!!selectedTask} 
                 onOpenChange={(open) => !open && setSelectedTask(null)} 
                 onDelete={handleTaskDeleted}
+                userRole={userRole}
             />
         )}
         <ActivityDrawer
@@ -676,6 +720,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                             onTaskClick={setSelectedTask}
                             workpanelId={workpanelId}
                             boardId={boardId}
+                            userRole={userRole}
                         />
                     ))}
                     {provided.placeholder}
