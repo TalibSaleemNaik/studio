@@ -154,6 +154,7 @@ function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, onUpdate }: { wo
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="manager">Manager</SelectItem>
                                                 <SelectItem value="editor">Editor</SelectItem>
                                                 <SelectItem value="viewer">Viewer</SelectItem>
                                             </SelectContent>
@@ -193,7 +194,7 @@ function CreateTeamRoomDialog({ workpanelId }: { workpanelId: string }) {
                 name,
                 workpanelId,
                 createdAt: serverTimestamp(),
-                members: { [user.uid]: 'editor' } // Creator is editor by default
+                members: { [user.uid]: 'manager' }
             });
 
             toast({ title: "TeamRoom created successfully!" });
@@ -485,6 +486,8 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                  });
                  setAllUsers(newAllUsers);
             }
+            
+            const userWorkpanelRole = workpanelData.members[user.uid];
 
             // Fetch TeamRooms
             const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), orderBy('createdAt'));
@@ -492,9 +495,10 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                 const teamRoomsData = teamRoomsSnapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() } as TeamRoom))
                     .filter(teamRoom => {
-                        const isMember = teamRoom.members && user.uid && teamRoom.members[user.uid];
-                        const isAdmin = workpanelData.members[user.uid] === 'admin';
-                        return isMember || isAdmin;
+                        if (userWorkpanelRole === 'owner' || userWorkpanelRole === 'admin' || userWorkpanelRole === 'member' || userWorkpanelRole === 'viewer') return true;
+                        if (teamRoom.members && user.uid && teamRoom.members[user.uid]) return true;
+                        if(userWorkpanelRole === 'guest') return false;
+                        return false;
                     });
                 setTeamRooms(teamRoomsData);
 
@@ -506,10 +510,11 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                         .filter(board => {
                             const teamRoom = teamRoomsData.find(f => f.id === board.teamRoomId);
                             const hasTeamRoomAccess = teamRoom && teamRoom.members && user.uid && teamRoom.members[user.uid];
-                            const isBoardMember = board.members && user.uid && board.members[user.uid];
-                            const isAdmin = workpanelData.members[user.uid] === 'admin' || workpanelData.members[user.uid] === 'member';
-                            
-                            return !board.isPrivate || isBoardMember || hasTeamRoomAccess || isAdmin;
+
+                            if (userWorkpanelRole === 'owner' || userWorkpanelRole === 'admin' || userWorkpanelRole === 'member' || userWorkpanelRole === 'viewer') return true;
+                            if (hasTeamRoomAccess) return true;
+                            if (board.members && user.uid && board.members[user.uid]) return true; // Direct board member
+                            return false;
                         });
                     setBoards(boardsData);
                     setError(null);
@@ -679,7 +684,7 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                  {teamRooms.map(teamRoom => (
                     <AccordionItem value={teamRoom.id} key={teamRoom.id} className="border rounded-lg bg-card">
                          <div className="flex items-center justify-between px-4 py-3 rounded-t-lg data-[state=open]:border-b hover:bg-muted/50">
-                            <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left">
+                            <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
                                <span>{teamRoom.name}</span>
                             </AccordionTrigger>
                             <ShareTeamRoomDialog workpanelId={workpanelId} teamRoom={teamRoom} allUsers={allUsers} onUpdate={()=>{}} />

@@ -306,10 +306,11 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
             }
         }
 
+        const canViewViaWorkpanel = ['owner', 'admin', 'member', 'viewer'].includes(userWorkpanelRole);
+
         const hasPermission = !boardData.isPrivate || 
-                              boardData.members[user.uid] || 
-                              userWorkpanelRole === 'admin' ||
-                              userWorkpanelRole === 'owner' ||
+                              (boardData.members && boardData.members[user.uid]) ||
+                              canViewViaWorkpanel ||
                               hasTeamRoomAccess;
 
 
@@ -567,7 +568,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                                             key={member.uid} 
                                             value={member.displayName || member.uid}
                                             onSelect={() => handleAssigneeSelect(member.uid)}
-                                            className="cursor-pointer"
                                         >
                                             <Checkbox className="mr-2" checked={selectedAssignees.includes(member.uid)} />
                                             <Avatar className="h-6 w-6 mr-2">
@@ -601,7 +601,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                                             key={p}
                                             value={p}
                                             onSelect={() => handlePrioritySelect(p)}
-                                            className="cursor-pointer"
                                         >
                                             <Checkbox className="mr-2" checked={selectedPriorities.includes(p)} />
                                             <span>{p}</span>
