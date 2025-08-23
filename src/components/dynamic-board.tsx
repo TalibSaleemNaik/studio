@@ -30,7 +30,7 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { TableView } from './board/table-view';
 import { useSearchParams } from 'next/navigation';
 
-function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { workpanelId: string, boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
+function BoardMembersDialog({ boardId, boardMembers, userRole }: { boardId: string, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
@@ -47,12 +47,11 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
 
         setIsInviting(true);
         try {
-             if (!workpanelId) {
-                toast({ variant: 'destructive', title: 'Cannot invite: Workpanel ID is missing.' });
-                 setIsInviting(false);
-                 return;
+            const boardDoc = await getDoc(doc(db, `workspaces`, 'dummy', 'boards', boardId)); // This is a bit of a hack to get the parent
+            if(!boardDoc.ref.parent.parent) {
+                throw new Error("Could not determine the workpanel for this board.")
             }
-
+            const workpanelId = boardDoc.ref.parent.parent.id;
 
             const usersRef = collection(db, 'users');
             const q = query(usersRef, where('email', '==', trimmedEmail));
@@ -115,6 +114,11 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
         }
 
         try {
+            const boardDoc = await getDoc(doc(db, `workspaces`, 'dummy', 'boards', boardId));
+            if(!boardDoc.ref.parent.parent) {
+                throw new Error("Could not determine the workpanel for this board.")
+            }
+            const workpanelId = boardDoc.ref.parent.parent.id;
             const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
             
             await updateDoc(boardRef, {
@@ -134,22 +138,31 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
             return;
         }
 
-        try {
-            const memberToRemove = boardMembers.find(m => m.uid === memberId);
-            if (!memberToRemove) throw new Error("Member not found");
+        const memberToRemove = boardMembers.find(m => m.uid === memberId);
+        if (!memberToRemove) return;
 
+        try {
             await runTransaction(db, async (transaction) => {
-                // --- READS FIRST ---
-                const currentBoardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
-                const workpanelDoc = await transaction.get(doc(db, 'workspaces', workpanelId));
-                if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
+                // Find the board and its parent workpanel securely.
+                const boardCollectionGroup = query(collectionGroup(db, 'boards'), where('__name__', '==', `workspaces/dummy/boards/${boardId}`.replace('dummy/','')));
+                const boardSnap = await getDocs(boardCollectionGroup);
+                if (boardSnap.empty) throw new Error("Board not found.");
+                const boardDoc = boardSnap.docs[0];
+                const boardWorkpanelId = boardDoc.ref.parent.parent?.id;
+                if (!boardWorkpanelId) throw new Error("Could not determine workpanel for the board.");
                 
+                const currentBoardRef = boardDoc.ref;
+
+                // --- ALL READS FIRST ---
+                const workpanelDoc = await transaction.get(doc(db, 'workspaces', boardWorkpanelId));
+                if (!workpanelDoc.exists()) throw new Error("Workpanel not found.");
+
                 // 1. Check for other access points
-                const boardsQuery = query(collection(db, `workspaces/${workpanelId}/boards`), where('memberUids', 'array-contains', memberId));
+                const boardsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/boards`), where('memberUids', 'array-contains', memberId));
                 const boardsSnap = await transaction.get(boardsQuery);
                 const otherBoardAccess = boardsSnap.docs.filter(d => d.id !== boardId).length > 0;
 
-                const teamRoomsQuery = query(collection(db, `workspaces/${workpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
+                const teamRoomsQuery = query(collection(db, `workspaces/${boardWorkpanelId}/teamRooms`), where('memberUids', 'array-contains', memberId));
                 const teamRoomsSnap = await transaction.get(teamRoomsQuery);
                 const teamRoomAccess = teamRoomsSnap.size > 0;
                 
@@ -159,7 +172,7 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 
                 const userDocRef = doc(db, 'users', memberId);
 
-                // --- WRITES LAST ---
+                // --- ALL WRITES LAST ---
                 // 1. Remove user from board
                 transaction.update(currentBoardRef, {
                     [`members.${memberId}`]: deleteField(),
@@ -169,18 +182,23 @@ function BoardMembersDialog({ workpanelId, boardId, boardMembers, userRole }: { 
                 // 2. If no other access found, remove from accessibleWorkpanels
                 if (!hasOtherAccess) {
                     transaction.update(userDocRef, {
-                        accessibleWorkpanels: arrayRemove(workpanelId)
+                        accessibleWorkpanels: arrayRemove(boardWorkpanelId)
                     });
                 }
             });
 
             if (user && memberToRemove) {
-                const simpleUser: SimpleUser = {
+                 const simpleUser: SimpleUser = {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL,
                 };
-                await logActivity(workpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                // We need the workpanelId for logging, let's get it again outside the transaction
+                const boardDoc = await getDoc(doc(db, `workspaces/dummy/boards/${boardId}`.replace('dummy/','')));
+                const boardWorkpanelId = boardDoc.ref.parent.parent?.id;
+                if (boardWorkpanelId) {
+                    await logActivity(boardWorkpanelId, boardId, simpleUser, `removed ${memberToRemove.displayName} from the board.`);
+                }
             }
 
             toast({ title: 'Member removed.' });
@@ -732,7 +750,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId?: string
                     <History className="mr-2 h-4 w-4" />
                     Activity
                 </Button>
-                <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} boardMembers={boardMembers} userRole={userRole} />
+                <BoardMembersDialog boardId={boardId} boardMembers={boardMembers} userRole={userRole} />
                  {activeView === 'kanban' && (
                     <CreateGroupDialog 
                         workpanelId={workpanelId}
