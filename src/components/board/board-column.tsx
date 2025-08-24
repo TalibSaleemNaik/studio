@@ -249,7 +249,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                     ref={provided.innerRef}
                                     {...provided.droppableProps}
                                     className={cn(
-                                        'flex-1 space-y-3 overflow-y-auto transition-colors p-2',
+                                        'flex-1 space-y-3 overflow-y-auto transition-colors p-3',
                                         snapshot.isDraggingOver && "bg-primary/10"
                                     )}
                                 >
