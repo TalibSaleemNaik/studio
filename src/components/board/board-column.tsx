@@ -229,7 +229,10 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                     {...provided.draggableProps}
                     className="shrink-0 w-80 flex flex-col"
                 >
-                    <div className="bg-muted/30 rounded-lg flex flex-col h-full p-3">
+                    <div
+                        className="rounded-lg flex flex-col h-full p-3"
+                        style={{ backgroundColor: '#373955' }}
+                    >
                         <div
                             {...provided.dragHandleProps}
                             className={cn("flex justify-between items-center p-3 rounded-lg mb-4", color)}
@@ -250,7 +253,6 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                             'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 transition-colors rounded-lg min-h-[150px] p-2',
                                             snapshot.isDraggingOver && "bg-primary/10"
                                         )}
-                                        style={{ backgroundColor: '#373955' }}
                                     >
                                         {column.items.map((item, index) => {
                                             const isAssigned = item.assignees?.includes(user!.uid);
