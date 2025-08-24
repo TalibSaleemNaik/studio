@@ -61,7 +61,7 @@ export function CreateGroupDialog({ workpanelId, boardId, columnCount, userRole 
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                 <Button variant="outline" className="shrink-0">
+                 <Button variant="outline">
                   <Plus className="mr-2 h-4 w-4" /> Add column
                 </Button>
             </DialogTrigger>

@@ -304,8 +304,8 @@ export function BoardHeader({
     const directMembers = boardMembers.filter(m => board.members[m.uid]);
 
   return (
-    <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-        <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center justify-between mb-4 flex-wrap gap-y-4 gap-x-2">
+        <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
             <Tabs value={activeView} onValueChange={setActiveView}>
             <TabsList>
                 <TabsTrigger value="kanban"><LayoutGrid className="mr-2 h-4 w-4" />Kanban</TabsTrigger>
@@ -318,13 +318,13 @@ export function BoardHeader({
                 placeholder="Search tasks..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-60 bg-muted"
+                className="pl-9 w-40 md:w-60 bg-muted"
             />
         </div>
         <Popover>
             <PopoverTrigger asChild>
                 <Button variant="outline" className="gap-1">
-                    <span>All assignees</span>
+                    <span>Assignees</span>
                     {selectedAssignees.length > 0 && <Badge variant="secondary">{selectedAssignees.length}</Badge>}
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -357,7 +357,7 @@ export function BoardHeader({
             <Popover>
             <PopoverTrigger asChild>
                 <Button variant="outline" className="gap-1">
-                    <span>All priorities</span>
+                    <span>Priority</span>
                         {selectedPriorities.length > 0 && <Badge variant="secondary">{selectedPriorities.length}</Badge>}
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -375,7 +375,7 @@ export function BoardHeader({
                                     onSelect={() => handlePrioritySelect(p)}
                                 >
                                     <Checkbox className="mr-2" checked={selectedPriorities.includes(p)} />
-                                    <span>{p}</span>
+                                    <span className="capitalize">{p}</span>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
@@ -384,7 +384,7 @@ export function BoardHeader({
             </PopoverContent>
         </Popover>
         <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-auto gap-1">
                 <SelectValue placeholder="Filter by due date" />
             </SelectTrigger>
             <SelectContent>
@@ -427,7 +427,7 @@ export function BoardHeader({
                 Activity
             </Button>
             <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} board={board} boardMembers={boardMembers} userRole={userRole} />
-            {activeView === 'kanban' && openCreateGroupDialog}
+            {activeView === 'kanban' && userRole === 'manager' && openCreateGroupDialog}
         </div>
     </div>
   )
