@@ -240,17 +240,17 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                         <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                     </div>
                     <div
-                        className="rounded-b-lg flex flex-col h-full p-3"
+                        className="rounded-b-lg flex flex-col h-full"
                         style={{ backgroundColor: '#373955' }}
                     >
-                        <div className="flex-1 flex flex-col min-h-0">
+                        <div className="flex-1 flex flex-col min-h-0 p-3">
                             <Droppable droppableId={column.id} type="TASK" isDropDisabled={!isDroppable}>
                                 {(provided, snapshot) => (
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
                                         className={cn(
-                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 transition-colors rounded-lg min-h-[150px] p-2',
+                                            'flex-1 space-y-3 overflow-y-auto transition-colors rounded-lg min-h-[150px] p-1',
                                             snapshot.isDraggingOver && "bg-primary/10"
                                         )}
                                     >
