@@ -227,7 +227,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                 <div
                     ref={provided.innerRef}
                     {...provided.draggableProps}
-                    className="shrink-0 w-80 flex flex-col rounded-[25px] overflow-hidden"
+                    className="shrink-0 w-80 flex flex-col rounded-[10px] overflow-hidden"
                 >
                     <div
                         {...provided.dragHandleProps}
