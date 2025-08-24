@@ -102,7 +102,7 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable }: { 
                     onClick={onClick}
                      className={cn(
                         "rounded-xl p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
-                        snapshot.isDragging && "shadow-xl scale-105",
+                        snapshot.isDragging && "shadow-xl scale-105 rotate-3",
                         pConfig ? pConfig : "bg-border",
                         !isDraggable && 'cursor-not-allowed'
                     )}
@@ -152,5 +152,6 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable }: { 
         </Draggable>
     );
 }
+
 
 
