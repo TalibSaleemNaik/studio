@@ -206,11 +206,11 @@ function QuickAdd({ column, workpanelId, boardId, userRole }: { column: Column, 
 }
 
 const columnColors = [
-    'bg-sky-500',
-    'bg-amber-500',
-    'bg-emerald-500',
-    'bg-rose-500',
-    'bg-indigo-500',
+    'bg-gradient-to-b from-sky-400 to-sky-500',
+    'bg-gradient-to-b from-amber-400 to-amber-500',
+    'bg-gradient-to-b from-emerald-400 to-emerald-500',
+    'bg-gradient-to-b from-rose-400 to-rose-500',
+    'bg-gradient-to-b from-indigo-400 to-indigo-500',
 ];
 
 export function BoardColumn({ column, index, boardMembers, onTaskClick, workpanelId, boardId, userRole, cardRotation }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workpanelId: string; boardId: string; userRole: BoardRole; cardRotation: number; }) {
