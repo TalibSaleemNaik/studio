@@ -87,10 +87,10 @@ export default {
         },
         'fire-glow': {
           '0%, 100%': {
-             boxShadow: '0 0 10px -5px hsl(var(--destructive))'
+             boxShadow: '0 0 20px -5px hsl(var(--destructive))'
           },
           '50%': {
-             boxShadow: '0 0 15px 0px hsl(var(--destructive) / 0.8)'
+             boxShadow: '0 0 30px 5px hsl(var(--destructive) / 0.8)'
           }
         }
       },
