@@ -98,7 +98,7 @@ function ColumnMenu({ column, workpanelId, boardId, userRole }: { column: Column
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20">
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
@@ -229,51 +229,50 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                     {...provided.draggableProps}
                     className="shrink-0 w-80"
                 >
-                    <div className="bg-muted/30 rounded-lg p-3 h-full flex flex-col">
+                    <div className="bg-muted/30 rounded-lg flex flex-col h-full">
                         <div
                             {...provided.dragHandleProps}
-                            className="flex justify-between items-center mb-4 "
+                            className={cn("flex justify-between items-center p-3 rounded-t-lg", color)}
                         >
-                            <div className='flex items-center gap-3'>
-                                <div className={cn("h-2.5 w-2.5 rounded-full", color)} />
-                                <h2 className="text-md font-semibold text-foreground/90">{column.name}</h2>
-                                <span className="text-sm font-medium bg-background px-2 py-0.5 rounded-md text-muted-foreground">{column.items.length}</span>
+                            <div className='flex items-center gap-2'>
+                                <h2 className="text-md font-semibold text-white">{column.name}</h2>
+                                <span className="text-sm font-medium bg-white/20 text-white px-2 py-0.5 rounded-md">{column.items.length}</span>
                             </div>
                             <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                         </div>
-                        <Droppable droppableId={column.id} type="TASK" isDropDisabled={!isDroppable}>
-                            {(provided, snapshot) => (
-                                <div
-                                    ref={provided.innerRef}
-                                    {...provided.droppableProps}
-                                    className={cn(
-                                        "flex-1 flex flex-col transition-colors rounded-lg",
-                                    )}
-                                >
-                                    <div className={cn(
-                                        'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 min-h-[1px]',
-                                        snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
-                                    )}>
-                                        {column.items.map((item, index) => {
-                                            const isAssigned = item.assignees?.includes(user!.uid);
-                                            const isDraggable = userRole === 'manager' || (userRole === 'editor' && isAssigned) || (userRole === 'guest' && isAssigned);
-                                            return (
-                                                <TaskCard
-                                                    key={item.id}
-                                                    task={item}
-                                                    index={index}
-                                                    boardMembers={boardMembers}
-                                                    onClick={() => onTaskClick(item)}
-                                                    isDraggable={isDraggable}
-                                                />
-                                            );
-                                        })}
-                                        {provided.placeholder}
+                        <div className="p-3 flex-1 flex flex-col">
+                            <Droppable droppableId={column.id} type="TASK" isDropDisabled={!isDroppable}>
+                                {(provided, snapshot) => (
+                                    <div
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                        className="flex-1 flex flex-col transition-colors rounded-lg min-h-[150px]"
+                                    >
+                                        <div className={cn(
+                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3',
+                                            snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
+                                        )}>
+                                            {column.items.map((item, index) => {
+                                                const isAssigned = item.assignees?.includes(user!.uid);
+                                                const isDraggable = userRole === 'manager' || (userRole === 'editor' && isAssigned) || (userRole === 'guest' && isAssigned);
+                                                return (
+                                                    <TaskCard
+                                                        key={item.id}
+                                                        task={item}
+                                                        index={index}
+                                                        boardMembers={boardMembers}
+                                                        onClick={() => onTaskClick(item)}
+                                                        isDraggable={isDraggable}
+                                                    />
+                                                );
+                                            })}
+                                            {provided.placeholder}
+                                        </div>
+                                        <QuickAdd column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                                     </div>
-                                    <QuickAdd column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
-                                </div>
-                            )}
-                        </Droppable>
+                                )}
+                            </Droppable>
+                        </div>
                     </div>
                 </div>
             )}
