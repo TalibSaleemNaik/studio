@@ -1,3 +1,4 @@
+
 import type {Config} from 'tailwindcss';
 
 export default {
@@ -84,10 +85,19 @@ export default {
             height: '0',
           },
         },
+        'fire-glow': {
+          '0%, 100%': {
+             boxShadow: '0 0 10px -5px hsl(var(--destructive))'
+          },
+          '50%': {
+             boxShadow: '0 0 15px 0px hsl(var(--destructive) / 0.8)'
+          }
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'fire-glow': 'fire-glow 2s ease-in-out infinite',
       },
     },
   },

@@ -131,7 +131,8 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rota
                                 "rounded-[5px] p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
                                 snapshot.isDragging && "shadow-xl scale-105",
                                 pConfig ? pConfig.gradient : "bg-border",
-                                !isDraggable && 'cursor-not-allowed'
+                                !isDraggable && 'cursor-not-allowed',
+                                task.priority === 'urgent' && 'animate-fire-glow'
                             )}
                         >
                             <div className="bg-card rounded-[5px] p-3.5 flex flex-col gap-4">
@@ -171,7 +172,7 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rota
                                             <Badge key={tag} className={cn('text-xs border font-medium', tagColors[i % tagColors.length])}>#{tag}</Badge>
                                         ))}
                                     </div>
-                                    {pConfig && (
+                                     {pConfig && (
                                         <div className={cn("flex items-center gap-1.5 text-xs font-semibold", pConfig.color)}>
                                             <Flag className="h-3.5 w-3.5" />
                                             <span>{pConfig.label}</span>
