@@ -326,8 +326,8 @@ export function BoardHeader({
         toast({ variant: 'destructive', title: 'Failed to rename board' });
         setBoard(prev => prev ? { ...prev, name: originalBoardName } : null);
       }
-    } else {
-      setBoard(prev => prev ? { ...prev, name: originalBoardName } : null);
+    } else if (newName === '') { // Prevent blank name
+        setBoard(prev => prev ? { ...prev, name: originalBoardName } : null);
     }
   };
   
@@ -341,7 +341,7 @@ export function BoardHeader({
                 onFocus={() => setOriginalBoardName(board.name)}
                 onBlur={handleTitleBlur}
                 disabled={!canEditHeader}
-                className="text-2xl font-bold border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 p-0 h-auto"
+                className="text-2xl font-bold border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
                 aria-label="Board title"
             />
              <div className="flex items-center gap-2">
