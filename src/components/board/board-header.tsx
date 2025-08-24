@@ -182,9 +182,33 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
     return (
         <Dialog>
             <DialogTrigger asChild>
-                <Button variant="outline">
-                    <Share className="mr-2 h-4 w-4" /> Share
-                </Button>
+                <div className="flex items-center pl-2 pr-1 py-1 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer">
+                    <div className="flex items-center">
+                        <TooltipProvider>
+                           <div className="flex -space-x-2">
+                               {directMembers.slice(0, 3).map(member => (
+                                   <Tooltip key={member.uid}>
+                                       <TooltipTrigger asChild>
+                                           <Avatar className="h-6 w-6 border-2 border-background">
+                                               <AvatarImage src={member.photoURL} alt={member.displayName} />
+                                               <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                           </Avatar>
+                                       </TooltipTrigger>
+                                       <TooltipContent>{member.displayName}</TooltipContent>
+                                   </Tooltip>
+                               ))}
+                           </div>
+                        </TooltipProvider>
+                        {directMembers.length > 3 && (
+                           <Badge variant="secondary" className="mr-2 ml-1 h-6 w-6 justify-center p-0">
+                               +{directMembers.length - 3}
+                           </Badge>
+                        )}
+                   </div>
+                   <Button variant="ghost" size="sm" className="ml-2">
+                       <Share className="mr-2 h-4 w-4" /> Share
+                   </Button>
+                </div>
             </DialogTrigger>
             <DialogContent>
                 <DialogHeader>
@@ -374,28 +398,6 @@ export function BoardHeader({
                 </h1>
             </div>
              <div className="flex items-center gap-2">
-                 <div className="flex items-center">
-                     <TooltipProvider>
-                        <div className="flex -space-x-2 mr-2">
-                            {directMembers.slice(0, 3).map(member => (
-                                <Tooltip key={member.uid}>
-                                    <TooltipTrigger asChild>
-                                        <Avatar className="h-8 w-8 border-2 border-background">
-                                            <AvatarImage src={member.photoURL} alt={member.displayName} />
-                                            <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
-                                        </Avatar>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{member.displayName}</TooltipContent>
-                                </Tooltip>
-                            ))}
-                        </div>
-                     </TooltipProvider>
-                     {directMembers.length > 3 && (
-                        <Badge variant="secondary" className="mr-2">
-                            +{directMembers.length - 3}
-                        </Badge>
-                     )}
-                </div>
                 <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} board={board} boardMembers={boardMembers} userRole={userRole} />
             </div>
         </div>
@@ -508,4 +510,5 @@ export function BoardHeader({
   )
 }
 
+    
     
