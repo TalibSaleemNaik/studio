@@ -36,12 +36,91 @@ import { createNotification } from '@/lib/notification-service';
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
-const priorityConfig = {
-    low: { label: 'Low', icon: Flag, color: 'text-sky-500' },
-    medium: { label: 'Medium', icon: Flag, color: 'text-yellow-500' },
-    high: { label: 'High', icon: Flag, color: 'text-orange-500' },
-    urgent: { label: 'Urgent', icon: Flag, color: 'text-red-500' },
-};
+
+function GradientFlag({
+    id,
+    stops,
+    className,
+  }: {
+    id: string;
+    stops: { offset: string; color: string }[];
+    className?: string;
+  }) {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <defs>
+          <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+            {stops.map(s => (
+              <stop key={s.offset} offset={s.offset} stopColor={s.color} />
+            ))}
+          </linearGradient>
+        </defs>
+  
+        {/* pole */}
+        <path
+          d="M4 2v20"
+          stroke="#94a3b8"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+  
+        {/* filled flag – slightly overlaps the pole and has a matching stroke to avoid gaps */}
+        <path
+          d="
+            M5.2 4
+            C 8.4 3.2, 10.6 5.2, 13.8 4.5
+            L 18.5 3.8
+            L 18.5 12.2
+            C 15.3 13.0, 13.1 11.0, 10.0 11.7
+            L 5.2 11.7 Z
+          "
+          fill={`url(#${id})`}
+          stroke={`url(#${id})`}
+          strokeWidth="1.25"
+          strokeLinejoin="round"
+          shapeRendering="geometricPrecision"
+        />
+      </svg>
+    );
+  }
+  
+  
+  const priorityConfig = {
+    low: {
+      label: 'Low',
+      stops: [
+        { offset: '0%',  color: '#4ade80' }, // green-400
+        { offset: '50%', color: '#2dd4bf' }, // teal-400
+        { offset: '100%',color: '#38bdf8' }, // sky-400
+      ],
+    },
+    medium: {
+      label: 'Medium',
+      stops: [
+        { offset: '0%',  color: '#eab308' }, // yellow-500
+        { offset: '50%', color: '#bef264' }, // lime-300
+        { offset: '100%',color: '#86efac' }, // green-300
+      ],
+    },
+    high: {
+      label: 'High',
+      stops: [
+        { offset: '0%',  color: '#fb923c' }, // orange-400
+        { offset: '50%', color: '#f59e0b' }, // amber-500-ish
+        { offset: '100%',color: '#fde047' }, // yellow-300
+      ],
+    },
+    urgent: {
+      label: 'Urgent',
+      stops: [
+        { offset: '0%',  color: '#f43f5e' }, // rose-500
+        { offset: '50%', color: '#ef4444' }, // red-500
+        { offset: '100%',color: '#fb923c' }, // orange-400
+      ],
+    },
+  } as const;
+  
+  
 
 
 export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boardMembers, isOpen, onOpenChange, onDelete, userRole }: { task: Task; workspaceId: string; boardId:string; boardMembers: BoardMember[]; isOpen: boolean; onOpenChange: (open: boolean) => void; onDelete: (taskId: string) => void; userRole: BoardRole; }) {
@@ -435,31 +514,18 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                         <SelectValue placeholder="Set priority" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="low">
-                                            <div className="flex items-center gap-2">
-                                                <Flag className={cn("h-4 w-4", priorityConfig.low.color)} />
-                                                <span>{priorityConfig.low.label}</span>
-                                            </div>
+                                    {Object.entries(priorityConfig).map(([key, config]) => (
+                                        <SelectItem key={key} value={key}>
+                                        <div className="flex items-center gap-2">
+                                            <GradientFlag id={`grad-${key}`} stops={config.stops} className="h-4 w-4" />
+                                            <span>{config.label}</span>
+                                        </div>
                                         </SelectItem>
-                                         <SelectItem value="medium">
-                                            <div className="flex items-center gap-2">
-                                                <Flag className={cn("h-4 w-4", priorityConfig.medium.color)} />
-                                                <span>{priorityConfig.medium.label}</span>
-                                            </div>
-                                        </SelectItem>
-                                         <SelectItem value="high">
-                                            <div className="flex items-center gap-2">
-                                                <Flag className={cn("h-4 w-4", priorityConfig.high.color)} />
-                                                <span>{priorityConfig.high.label}</span>
-                                            </div>
-                                        </SelectItem>
-                                         <SelectItem value="urgent">
-                                            <div className="flex items-center gap-2">
-                                                <Flag className={cn("h-4 w-4", priorityConfig.urgent.color)} />
-                                                <span>{priorityConfig.urgent.label}</span>
-                                            </div>
-                                        </SelectItem>
+                                    ))}
                                     </SelectContent>
+
+
+
                                 </Select>
                             </div>
                         </div>

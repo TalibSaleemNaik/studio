@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { Calendar, MoreHorizontal } from 'lucide-react';
+import { Calendar, MoreHorizontal, Flag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,10 +16,26 @@ import { Progress } from '../ui/progress';
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
 const priorityConfig = {
-    urgent: 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-400',
-    high: 'bg-gradient-to-br from-orange-400 via-amber-400 to-yellow-300',
-    medium: 'bg-gradient-to-br from-yellow-500 via-lime-300 to-green-300',
-    low: 'bg-gradient-to-br from-green-500 via-teal-400 to-sky-300',
+    urgent: {
+      label: 'Urgent',
+      color: 'text-red-500',
+      gradient: 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-400'
+    },
+    high: {
+      label: 'High',
+      color: 'text-orange-500',
+      gradient: 'bg-gradient-to-br from-orange-400 via-amber-400 to-yellow-300'
+    },
+    medium: {
+      label: 'Medium',
+      color: 'text-yellow-500',
+      gradient: 'bg-gradient-to-br from-yellow-500 via-lime-300 to-green-300'
+    },
+    low: {
+      label: 'Low',
+      color: 'text-sky-500',
+      gradient: 'bg-gradient-to-br from-green-500 via-teal-400 to-sky-300'
+    },
 };
 
 const tagColors = [
@@ -112,13 +128,13 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rota
                         <div
                             onClick={onClick}
                             className={cn(
-                                "rounded-xl p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
+                                "rounded-[5px] p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
                                 snapshot.isDragging && "shadow-xl scale-105",
-                                pConfig ? pConfig : "bg-border",
+                                pConfig ? pConfig.gradient : "bg-border",
                                 !isDraggable && 'cursor-not-allowed'
                             )}
                         >
-                            <div className="bg-card rounded-[11px] p-3.5 flex flex-col gap-4">
+                            <div className="bg-card rounded-[5px] p-3.5 flex flex-col gap-4">
                                 <div className="flex justify-between items-start gap-2">
                                     <p className="font-semibold pr-6 flex-1">{task.content}</p>
                                     <div className='flex items-center gap-2'>
@@ -149,10 +165,18 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rota
                                     </div>
                                 </div>
 
-                                <div className="flex flex-wrap gap-2">
-                                    {task.tags?.map((tag, index) => (
-                                        <Badge key={tag} className={cn('text-xs border font-medium', tagColors[index % tagColors.length])}>#{tag}</Badge>
-                                    ))}
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap gap-2">
+                                        {task.tags?.map((tag, i) => (
+                                            <Badge key={tag} className={cn('text-xs border font-medium', tagColors[i % tagColors.length])}>#{tag}</Badge>
+                                        ))}
+                                    </div>
+                                    {pConfig && (
+                                        <div className={cn("flex items-center gap-1.5 text-xs font-semibold", pConfig.color)}>
+                                            <Flag className="h-3.5 w-3.5" />
+                                            <span>{pConfig.label}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
