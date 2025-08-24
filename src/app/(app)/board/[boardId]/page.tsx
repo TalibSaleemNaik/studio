@@ -11,7 +11,7 @@ export default function BoardPage({ params, searchParams }: PageProps) {
   const { workpanelId } = searchParams;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       <DynamicBoard boardId={boardId} workpanelId={workpanelId} />
     </div>
   );

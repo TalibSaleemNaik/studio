@@ -394,7 +394,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   const hasActiveFilters = searchTerm || selectedAssignees.length > 0 || selectedPriorities.length > 0 || dueDateFilter !== 'any';
 
   return (
-      <>
+      <div className="flex flex-col flex-1 min-h-0">
         <BoardHeader
             workpanelId={workpanelId}
             boardId={boardId}
@@ -450,7 +450,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
                     <div 
                         ref={provided.innerRef} 
                         {...provided.droppableProps}
-                        className="flex-1 flex items-stretch gap-5 overflow-x-auto pb-4 -mx-8 px-8"
+                        className="flex-1 flex items-stretch gap-5 overflow-x-auto pb-4"
                     >
                     {orderedColumns.map((column, index) => (
                         <BoardColumn
@@ -476,7 +476,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
                 onTaskClick={setSelectedTask}
             />
         )}
-    </>
+    </div>
   )
 }
 
@@ -519,5 +519,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
