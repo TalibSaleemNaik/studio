@@ -450,7 +450,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
                     <div 
                         ref={provided.innerRef} 
                         {...provided.droppableProps}
-                        className="flex-1 flex items-start gap-5 overflow-x-auto pb-4 -mx-8 px-8"
+                        className="flex-1 flex items-stretch gap-5 overflow-x-auto pb-4 -mx-8 px-8"
                     >
                     {orderedColumns.map((column, index) => (
                         <BoardColumn

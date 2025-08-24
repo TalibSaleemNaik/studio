@@ -227,7 +227,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                 <div
                     ref={provided.innerRef}
                     {...provided.draggableProps}
-                    className="shrink-0 w-80"
+                    className="shrink-0 w-80 flex flex-col"
                 >
                     <div className="bg-muted/30 rounded-lg flex flex-col h-full">
                         <div
@@ -246,10 +246,10 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className="flex-1 flex flex-col transition-colors rounded-lg min-h-[150px]"
+                                        className="flex-1 flex flex-col transition-colors rounded-lg"
                                     >
                                         <div className={cn(
-                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3',
+                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 min-h-[150px]',
                                             snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
                                         )}>
                                             {column.items.map((item, index) => {
@@ -279,3 +279,4 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
         </Draggable>
     );
 }
+
