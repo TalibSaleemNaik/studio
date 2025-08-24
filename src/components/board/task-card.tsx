@@ -20,6 +20,7 @@ const priorityConfig = {
     urgent: {
       label: 'Urgent',
       gradient: 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-400',
+      textColor: 'text-rose-400',
       stops: [
         { offset: '0%',  color: '#f43f5e' }, // rose-500
         { offset: '50%', color: '#ef4444' }, // red-500
@@ -29,6 +30,7 @@ const priorityConfig = {
     high: {
       label: 'High',
       gradient: 'bg-gradient-to-br from-orange-400 via-amber-400 to-yellow-300',
+      textColor: 'text-orange-400',
       stops: [
         { offset: '0%',  color: '#fb923c' }, // orange-400
         { offset: '50%', color: '#f59e0b' }, // amber-500-ish
@@ -38,6 +40,7 @@ const priorityConfig = {
     medium: {
       label: 'Medium',
       gradient: 'bg-gradient-to-br from-yellow-500 via-lime-300 to-green-300',
+      textColor: 'text-yellow-400',
        stops: [
         { offset: '0%',  color: '#eab308' }, // yellow-500
         { offset: '50%', color: '#bef264' }, // lime-300
@@ -47,6 +50,7 @@ const priorityConfig = {
     low: {
       label: 'Low',
       gradient: 'bg-gradient-to-br from-green-500 via-teal-400 to-sky-300',
+      textColor: 'text-sky-400',
       stops: [
         { offset: '0%',  color: '#4ade80' }, // green-400
         { offset: '50%', color: '#2dd4bf' }, // teal-400
@@ -123,7 +127,7 @@ function ChecklistProgressCircle({ task }: { task: Task }) {
 export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rotation }: { task: Task; index: number; boardMembers: BoardMember[]; onClick: () => void; isDraggable: boolean; rotation: number; }) {
     
     const getAssignee = (uid: string) => boardMembers.find(m => m.uid === uid);
-    const pConfig = task.priority ? priorityConfig[task.priority] : null;
+    const pConfig = task.priority ? priorityConfig[task.priority as keyof typeof priorityConfig] : null;
 
     return (
         <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable}>
@@ -190,7 +194,7 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rota
                                         ))}
                                     </div>
                                      {pConfig && task.priority && (
-                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                                        <div className={cn("flex items-center gap-1.5 text-xs font-semibold", pConfig.textColor)}>
                                             <GradientFlag id={`card-flag-${task.id}`} stops={pConfig.stops} className="h-3.5 w-3.5" />
                                             <span>{pConfig.label}</span>
                                         </div>
