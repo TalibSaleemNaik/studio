@@ -95,26 +95,19 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable }: { 
     return (
         <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable}>
             {(provided, snapshot) => {
-                const style = {
-                    ...provided.draggableProps.style,
-                    transform: snapshot.isDragging
-                        ? `${provided.draggableProps.style?.transform} rotate(3deg)`
-                        : provided.draggableProps.style?.transform,
-                };
-
                 return (
                     <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
+                        style={provided.draggableProps.style}
                         onClick={onClick}
                         className={cn(
                             "rounded-xl p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
-                            snapshot.isDragging && "shadow-xl scale-105",
+                            snapshot.isDragging && "shadow-xl scale-105 rotate-3",
                             pConfig ? pConfig : "bg-border",
                             !isDraggable && 'cursor-not-allowed'
                         )}
-                        style={style}
                     >
                         <div className="bg-card rounded-[11px] p-3.5 flex flex-col gap-4">
                             <div className="flex justify-between items-start gap-2">
