@@ -53,6 +53,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   const [dueDateFilter, setDueDateFilter] = React.useState('any');
   const [isActivityDrawerOpen, setIsActivityDrawerOpen] = React.useState(false);
   const [activeView, setActiveView] = React.useState('kanban');
+  const [cardRotation, setCardRotation] = React.useState(0);
   const { toast } = useToast();
 
   const allTasks = React.useMemo(() => columns ? Object.values(columns).flatMap(c => c.items) : [], [columns]);
@@ -267,7 +268,31 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     };
 }, [user, boardId, workpanelId, toast, calculateEffectiveRole]);
 
+  const handleDragStart = (start: any) => {
+    if (start.type !== 'TASK') return;
+
+    const startX = start.source.droppableSnapshot.frameClient.x + start.source.droppableSnapshot.frameClient.width / 2;
+    
+    const handleMouseMove = (event: MouseEvent) => {
+      const currentX = event.clientX;
+      const displacement = currentX - startX;
+      // Clamp rotation between -10 and 10 degrees for a subtle effect
+      const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
+      setCardRotation(newRotation);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      setCardRotation(0); // Reset rotation on drop
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+  
   const onDragEnd = async (result: DropResult) => {
+    setCardRotation(0); // Reset rotation on drop
     const { source, destination, type, draggableId } = result;
     if (!destination || !columns || !user || !workpanelId) return;
     
@@ -469,7 +494,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         {allColumns.length === 0 && activeView === 'kanban' ? (
              <EmptyBoardState createGroupDialog={createGroupDialog} />
         ) : activeView === 'kanban' ? (
-            <DragDropContext onDragEnd={onDragEnd}>
+            <DragDropContext onDragStart={handleDragStart} onDragEnd={onDragEnd}>
                 <Droppable droppableId="board" type="COLUMN" direction="horizontal">
                 {(provided) => (
                     <div 
@@ -487,6 +512,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
                             workpanelId={workpanelId}
                             boardId={boardId}
                             userRole={userRole}
+                            cardRotation={cardRotation}
                         />
                     ))}
                     {provided.placeholder}

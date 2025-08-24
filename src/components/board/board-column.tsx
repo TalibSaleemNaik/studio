@@ -213,7 +213,7 @@ const columnColors = [
     'bg-indigo-500',
 ];
 
-export function BoardColumn({ column, index, boardMembers, onTaskClick, workpanelId, boardId, userRole }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workpanelId: string; boardId: string; userRole: BoardRole; }) {
+export function BoardColumn({ column, index, boardMembers, onTaskClick, workpanelId, boardId, userRole, cardRotation }: { column: Column; index: number; boardMembers: BoardMember[]; onTaskClick: (task: Task) => void; workpanelId: string; boardId: string; userRole: BoardRole; cardRotation: number; }) {
     const color = columnColors[index % columnColors.length];
     const { user } = useAuth();
     
@@ -262,6 +262,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                                     boardMembers={boardMembers}
                                                     onClick={() => onTaskClick(item)}
                                                     isDraggable={isDraggable}
+                                                    rotation={cardRotation}
                                                 />
                                             );
                                         })}

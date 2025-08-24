@@ -87,7 +87,7 @@ function ChecklistProgressCircle({ task }: { task: Task }) {
     );
 }
 
-export function TaskCard({ task, index, boardMembers, onClick, isDraggable }: { task: Task; index: number; boardMembers: BoardMember[]; onClick: () => void; isDraggable: boolean; }) {
+export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rotation }: { task: Task; index: number; boardMembers: BoardMember[]; onClick: () => void; isDraggable: boolean; rotation: number; }) {
     
     const getAssignee = (uid: string) => boardMembers.find(m => m.uid === uid);
     const pConfig = task.priority ? priorityConfig[task.priority] : null;
@@ -95,18 +95,25 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable }: { 
     return (
         <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable}>
             {(provided, snapshot) => {
+                 const style = {
+                    ...provided.draggableProps.style,
+                    transform: snapshot.isDragging
+                        ? `${provided.draggableProps.style?.transform || ''} rotate(${rotation}deg)`
+                        : provided.draggableProps.style?.transform,
+                    transition: snapshot.isDragging ? 'transform 0.2s' : 'none',
+                };
                 return (
                     <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
-                        style={provided.draggableProps.style}
+                        style={style}
                     >
                         <div
                             onClick={onClick}
                             className={cn(
                                 "rounded-xl p-0.5 transition-all shadow-sm hover:shadow-lg cursor-pointer",
-                                snapshot.isDragging && "shadow-xl scale-105 rotate-3",
+                                snapshot.isDragging && "shadow-xl scale-105",
                                 pConfig ? pConfig : "bg-border",
                                 !isDraggable && 'cursor-not-allowed'
                             )}
