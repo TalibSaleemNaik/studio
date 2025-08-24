@@ -268,28 +268,38 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     };
 }, [user, boardId, workpanelId, toast, calculateEffectiveRole]);
 
-  const handleDragStart = (start: any) => {
-    if (start.type !== 'TASK') return;
+  const handleDragStart = React.useCallback((event: MouseEvent) => {
+    if ((event.target as HTMLElement).closest('[data-rfd-drag-handle-draggable-id]')) {
+      let startX: number | null = null;
+      
+      const handleMouseMove = (event: MouseEvent) => {
+          if (startX === null) {
+              startX = event.clientX;
+          }
+          const currentX = event.clientX;
+          const displacement = currentX - startX;
+          const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
+          setCardRotation(newRotation);
+      };
+      
+      const handleMouseUp = () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+          setCardRotation(0);
+          startX = null;
+      };
+      
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+  }, []);
 
-    const startX = start.source.droppableSnapshot.frameClient.x + start.source.droppableSnapshot.frameClient.width / 2;
-    
-    const handleMouseMove = (event: MouseEvent) => {
-      const currentX = event.clientX;
-      const displacement = currentX - startX;
-      // Clamp rotation between -10 and 10 degrees for a subtle effect
-      const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
-      setCardRotation(newRotation);
+  React.useEffect(() => {
+    window.addEventListener('mousedown', handleDragStart);
+    return () => {
+      window.removeEventListener('mousedown', handleDragStart);
     };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      setCardRotation(0); // Reset rotation on drop
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
+  }, [handleDragStart]);
   
   const onDragEnd = async (result: DropResult) => {
     setCardRotation(0); // Reset rotation on drop
@@ -494,7 +504,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         {allColumns.length === 0 && activeView === 'kanban' ? (
              <EmptyBoardState createGroupDialog={createGroupDialog} />
         ) : activeView === 'kanban' ? (
-            <DragDropContext onDragStart={handleDragStart} onDragEnd={onDragEnd}>
+            <DragDropContext onDragEnd={onDragEnd}>
                 <Droppable droppableId="board" type="COLUMN" direction="horizontal">
                 {(provided) => (
                     <div 
