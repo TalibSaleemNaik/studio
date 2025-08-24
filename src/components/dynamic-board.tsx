@@ -3,7 +3,7 @@
 
 import React from 'react';
 import dynamic from 'next/dynamic';
-import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Droppable, DropResult, DragStart } from '@hello-pangea/dnd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
 import { collection, doc, onSnapshot, orderBy, query, updateDoc, writeBatch, getDoc, collectionGroup, where, getDocs, limit, startAfter } from 'firebase/firestore';
@@ -268,40 +268,64 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     };
 }, [user, boardId, workpanelId, toast, calculateEffectiveRole]);
 
-  const handleDragStart = React.useCallback((event: MouseEvent) => {
-    if ((event.target as HTMLElement).closest('[data-rfd-drag-handle-draggable-id]')) {
-      let startX: number | null = null;
-      
-      const handleMouseMove = (event: MouseEvent) => {
-          if (startX === null) {
-              startX = event.clientX;
-          }
-          const currentX = event.clientX;
-          const displacement = currentX - startX;
-          const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
-          setCardRotation(newRotation);
-      };
-      
-      const handleMouseUp = () => {
-          window.removeEventListener('mousemove', handleMouseMove);
-          window.removeEventListener('mouseup', handleMouseUp);
-          setCardRotation(0);
-          startX = null;
-      };
-      
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
+  const animationFrameId = React.useRef<number | null>(null);
+  const startX = React.useRef(0);
+
+  const handleDragStart = React.useCallback((start: DragStart, event: MouseEvent) => {
+    startX.current = event.clientX;
+    
+    const updateRotation = () => {
+        setCardRotation((currentX) => {
+            const displacement = currentX - startX.current;
+            const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
+            return newRotation;
+        });
+        animationFrameId.current = requestAnimationFrame(updateRotation);
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+        const displacement = event.clientX - startX.current;
+        const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
+        setCardRotation(newRotation);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
+      setCardRotation(0);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp, { once: true });
   }, []);
 
   React.useEffect(() => {
-    window.addEventListener('mousedown', handleDragStart);
+    const onMouseDown = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest('[data-rfd-drag-handle-draggable-id]')) {
+        // The library will provide the DragStart object, but we need the initial MouseEvent.
+        // We pass the event to a handler that will be fully configured once onDragStart is called by the library.
+        // This is a bit of a workaround because the library doesn't expose the initial mouse event in onDragStart.
+        const onDragStartHandler = (start: DragStart) => {
+           handleDragStart(start, event);
+        };
+        // Temporarily store this specific handler to be used in onDragEnd.
+        (window as any).__onDragStartHandler = onDragStartHandler;
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown);
     return () => {
-      window.removeEventListener('mousedown', handleDragStart);
+      window.removeEventListener('mousedown', onMouseDown);
+      delete (window as any).__onDragStartHandler;
     };
   }, [handleDragStart]);
   
   const onDragEnd = async (result: DropResult) => {
+    if ((window as any).__onDragStartHandler) {
+      delete (window as any).__onDragStartHandler;
+    }
     setCardRotation(0); // Reset rotation on drop
     const { source, destination, type, draggableId } = result;
     if (!destination || !columns || !user || !workpanelId) return;
@@ -504,7 +528,14 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         {allColumns.length === 0 && activeView === 'kanban' ? (
              <EmptyBoardState createGroupDialog={createGroupDialog} />
         ) : activeView === 'kanban' ? (
-            <DragDropContext onDragEnd={onDragEnd}>
+            <DragDropContext 
+                onDragEnd={onDragEnd}
+                onDragStart={(start) => {
+                    if ((window as any).__onDragStartHandler) {
+                        (window as any).__onDragStartHandler(start);
+                    }
+                }}
+            >
                 <Droppable droppableId="board" type="COLUMN" direction="horizontal">
                 {(provided) => (
                     <div 
