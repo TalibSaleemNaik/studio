@@ -38,7 +38,7 @@ const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
 const priorityConfig = {
     low: { label: 'Low', icon: Flag, color: 'text-sky-500' },
-    medium: { label: 'Medium', icon: Flag, color: 'text-amber-500' },
+    medium: { label: 'Medium', icon: Flag, color: 'text-yellow-500' },
     high: { label: 'High', icon: Flag, color: 'text-orange-500' },
     urgent: { label: 'Urgent', icon: Flag, color: 'text-red-500' },
 };

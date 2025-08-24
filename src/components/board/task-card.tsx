@@ -16,10 +16,10 @@ import { Progress } from '../ui/progress';
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
 const priorityConfig = {
-    low: 'bg-gradient-to-br from-green-400 to-sky-400',
-    medium: 'bg-gradient-to-br from-yellow-400 to-amber-500',
-    high: 'bg-gradient-to-br from-orange-400 to-rose-500',
-    urgent: 'bg-gradient-to-br from-rose-500 to-red-600',
+    urgent: 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-400',
+    high: 'bg-gradient-to-br from-orange-400 via-amber-400 to-yellow-300',
+    medium: 'bg-gradient-to-br from-yellow-500 via-lime-300 to-green-300',
+    low: 'bg-gradient-to-br from-green-500 via-teal-400 to-sky-300',
 };
 
 const tagColors = [
