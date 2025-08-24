@@ -2,7 +2,7 @@ import React from 'react';
 import { UserNav } from '@/components/user-nav';
 import { StreamlineLogo } from '@/components/icons';
 import Link from 'next/link';
-import { Sidebar, SidebarContent, SidebarHeader, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 
 function AppLayout({
@@ -24,13 +24,13 @@ function AppLayout({
           <SidebarContent>
             <MainNav />
           </SidebarContent>
+          <SidebarFooter>
+            <UserNav />
+          </SidebarFooter>
         </Sidebar>
         <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-72 flex-1 min-w-0">
            <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 shrink-0">
              <SidebarTrigger />
-             <div className="ml-auto flex items-center gap-2">
-                <UserNav />
-             </div>
            </header>
            <main className="flex flex-col flex-1 gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 min-w-0 pb-4">
              {children}

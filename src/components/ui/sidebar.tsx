@@ -51,13 +51,10 @@ const Sidebar = React.forwardRef<
     <aside
       ref={ref}
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen w-72 flex-col border-r transition-transform duration-300 ease-in-out sm:flex",
+        "fixed left-0 top-0 z-40 h-screen w-72 flex flex-col border-r transition-transform duration-300 ease-in-out sm:flex bg-background",
         isMobile && !isOpen && "-translate-x-full",
         className
       )}
-      style={{
-        background: 'linear-gradient(to bottom, hsl(var(--background)), #393b53)',
-      }}
       {...props}
     />
   )
@@ -99,7 +96,7 @@ const SidebarFooter = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("border-t p-4", className)}
+      className={cn("border-t p-2", className)}
       {...props}
     />
   )

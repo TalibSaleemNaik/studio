@@ -511,50 +511,51 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
             isOpen={isActivityDrawerOpen}
             onOpenChange={setIsActivityDrawerOpen}
         />
-
-        {allColumns.length === 0 && activeView === 'kanban' ? (
-             <EmptyBoardState createGroupDialog={createGroupDialog} />
-        ) : activeView === 'kanban' ? (
-            <DragDropContext 
-                onDragEnd={onDragEnd}
-                onDragStart={(start) => {
-                    if ((window as any).__onDragStartHandler) {
-                        (window as any).__onDragStartHandler(start);
-                    }
-                }}
-            >
-                <Droppable droppableId="board" type="COLUMN" direction="horizontal">
-                {(provided) => (
-                    <div 
-                        ref={provided.innerRef} 
-                        {...provided.droppableProps}
-                        className="flex-1 flex items-stretch gap-5 overflow-x-auto pb-4"
-                    >
-                    {orderedColumns.map((column, index) => (
-                        <BoardColumn
-                            key={column.id}
-                            column={column}
-                            index={index}
-                            boardMembers={boardMembers}
-                            onTaskClick={setSelectedTask}
-                            workpanelId={workpanelId}
-                            boardId={boardId}
-                            userRole={userRole}
-                            cardRotation={cardRotation}
-                        />
-                    ))}
-                    {provided.placeholder}
-                    </div>
-                )}
-                </Droppable>
-            </DragDropContext>
-        ) : (
-            <TableView 
-                tasks={filteredTasks}
-                boardMembers={boardMembers}
-                onTaskClick={setSelectedTask}
-            />
-        )}
+        <div className='flex-1 flex flex-col min-h-0'>
+            {allColumns.length === 0 && activeView === 'kanban' ? (
+                <EmptyBoardState createGroupDialog={createGroupDialog} />
+            ) : activeView === 'kanban' ? (
+                <DragDropContext 
+                    onDragEnd={onDragEnd}
+                    onDragStart={(start) => {
+                        if ((window as any).__onDragStartHandler) {
+                            (window as any).__onDragStartHandler(start);
+                        }
+                    }}
+                >
+                    <Droppable droppableId="board" type="COLUMN" direction="horizontal">
+                    {(provided) => (
+                        <div 
+                            ref={provided.innerRef} 
+                            {...provided.droppableProps}
+                            className="flex-1 flex items-stretch gap-5 overflow-x-auto pb-4"
+                        >
+                        {orderedColumns.map((column, index) => (
+                            <BoardColumn
+                                key={column.id}
+                                column={column}
+                                index={index}
+                                boardMembers={boardMembers}
+                                onTaskClick={setSelectedTask}
+                                workpanelId={workpanelId}
+                                boardId={boardId}
+                                userRole={userRole}
+                                cardRotation={cardRotation}
+                            />
+                        ))}
+                        {provided.placeholder}
+                        </div>
+                    )}
+                    </Droppable>
+                </DragDropContext>
+            ) : (
+                <TableView 
+                    tasks={filteredTasks}
+                    boardMembers={boardMembers}
+                    onTaskClick={setSelectedTask}
+                />
+            )}
+        </div>
     </div>
   )
 }
