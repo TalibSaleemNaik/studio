@@ -274,15 +274,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   const handleDragStart = React.useCallback((start: DragStart, event: MouseEvent) => {
     startX.current = event.clientX;
     
-    const updateRotation = () => {
-        setCardRotation((currentX) => {
-            const displacement = currentX - startX.current;
-            const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
-            return newRotation;
-        });
-        animationFrameId.current = requestAnimationFrame(updateRotation);
-    };
-
     const handleMouseMove = (event: MouseEvent) => {
         const displacement = event.clientX - startX.current;
         const newRotation = Math.max(-10, Math.min(10, displacement * 0.05));
@@ -305,13 +296,9 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   React.useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest('[data-rfd-drag-handle-draggable-id]')) {
-        // The library will provide the DragStart object, but we need the initial MouseEvent.
-        // We pass the event to a handler that will be fully configured once onDragStart is called by the library.
-        // This is a bit of a workaround because the library doesn't expose the initial mouse event in onDragStart.
         const onDragStartHandler = (start: DragStart) => {
            handleDragStart(start, event);
         };
-        // Temporarily store this specific handler to be used in onDragEnd.
         (window as any).__onDragStartHandler = onDragStartHandler;
       }
     };
