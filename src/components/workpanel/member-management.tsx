@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Loader2, Trash2, AlertTriangle, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot, getDoc, updateDoc, collection, query, where, getDocs, deleteField } from "firebase/firestore";
+import { doc, onSnapshot, getDoc, updateDoc, collection, query, where, getDocs, deleteField, runTransaction, arrayRemove } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "../ui/skeleton";
 import { UserProfile, WorkpanelRole } from "../board/types";
@@ -168,9 +168,19 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
         if (!memberToRemove) return;
         
         try {
-            const workpanelRef = doc(db, `workspaces/${workpanelId}`);
-            await updateDoc(workpanelRef, {
-                [`members.${memberToRemove.uid}`]: deleteField()
+            await runTransaction(db, async (transaction) => {
+                const workpanelRef = doc(db, `workspaces/${workpanelId}`);
+                const userRef = doc(db, 'users', memberToRemove.uid);
+                
+                // Remove from workpanel members map
+                transaction.update(workpanelRef, {
+                    [`members.${memberToRemove.uid}`]: deleteField()
+                });
+
+                // Remove from user's accessible workpanels list
+                transaction.update(userRef, {
+                    accessibleWorkpanels: arrayRemove(workpanelId)
+                });
             });
 
             toast({ title: 'Member removed from workpanel.' });
@@ -289,7 +299,7 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        This will remove <span className="font-semibold">{memberToRemove?.displayName}</span> from the workpanel and all boards within it. This action cannot be undone.
+                        This will remove <span className="font-semibold">{memberToRemove?.displayName}</span> from the workpanel and all boards and teamrooms within it. This action cannot be undone.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
