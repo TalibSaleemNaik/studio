@@ -19,6 +19,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { collection, doc, query, where, getDocs, runTransaction, arrayUnion, updateDoc, deleteField, arrayRemove, getDoc } from 'firebase/firestore';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 
 function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRole }: { workpanelId: string, boardId: string, board: Board, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
@@ -26,11 +27,11 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
     const { toast } = useToast();
     const { user } = useAuth();
     
-    if (userRole !== 'manager') return null;
-
+    const canManageMembers = userRole === 'manager';
     const directMembers = boardMembers.filter(m => board.members[m.uid]);
 
     const handleInvite = async () => {
+        if (!canManageMembers) return;
         const trimmedEmail = inviteEmail.trim().toLowerCase();
         if (!trimmedEmail) {
             toast({ variant: 'destructive', title: 'Please enter an email address.' });
@@ -93,6 +94,7 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
     };
     
     const handleRoleChange = async (memberId: string, newRole: BoardRole) => {
+        if (!canManageMembers) return;
         const isSelf = user?.uid === memberId;
         if (isSelf) {
             toast({variant: 'destructive', title: 'You cannot change your own role.'});
@@ -113,6 +115,7 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
     };
     
     const handleRemoveMember = async (memberId: string) => {
+        if (!canManageMembers) return;
         const isSelf = user?.uid === memberId;
         if (isSelf) {
             toast({ variant: 'destructive', title: 'You cannot remove yourself.' });
@@ -189,18 +192,22 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
                         Manage who has access to this board.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="flex space-x-2">
-                        <Input 
-                            placeholder="Enter email to invite..." 
-                            value={inviteEmail}
-                            onChange={(e) => setInviteEmail(e.target.value)}
-                            disabled={isInviting}
-                        />
-                        <Button onClick={handleInvite} disabled={isInviting}>
-                            {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Invite'}
-                        </Button>
-                    </div>
+                 <div className="space-y-4 py-4">
+                    {canManageMembers ? (
+                        <div className="flex space-x-2">
+                            <Input
+                                placeholder="Enter email to invite..."
+                                value={inviteEmail}
+                                onChange={(e) => setInviteEmail(e.target.value)}
+                                disabled={isInviting}
+                            />
+                            <Button onClick={handleInvite} disabled={isInviting}>
+                                {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Invite'}
+                            </Button>
+                        </div>
+                     ) : (
+                        <p className="text-sm text-muted-foreground">Only managers can invite new members.</p>
+                     )}
                     <div className="space-y-2">
                         <h4 className="font-medium">People with access</h4>
                         {directMembers.map(member => (
@@ -219,7 +226,7 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
                                     <Select 
                                         value={member.role}
                                         onValueChange={(value) => handleRoleChange(member.uid, value as BoardRole)}
-                                        disabled={user?.uid === member.uid}
+                                        disabled={user?.uid === member.uid || !canManageMembers}
                                     >
                                         <SelectTrigger className="w-[110px]">
                                             <SelectValue />
@@ -231,12 +238,19 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
                                             <SelectItem value="guest">Guest</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(member.uid)} disabled={user?.uid === member.uid}>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-destructive" 
+                                        onClick={() => handleRemoveMember(member.uid)} 
+                                        disabled={user?.uid === member.uid || !canManageMembers}
+                                    >
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
                             </div>
                         ))}
+                         {directMembers.length === 0 && <p className="text-sm text-muted-foreground">No one has been invited directly to this board.</p>}
                     </div>
                 </div>
             </DialogContent>
@@ -287,6 +301,8 @@ export function BoardHeader({
     setIsActivityDrawerOpen,
     openCreateGroupDialog,
 }: BoardHeaderProps) {
+    const directMembers = boardMembers.filter(m => board.members[m.uid]);
+
   return (
     <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
         <div className="flex items-center gap-2 flex-wrap">
@@ -384,6 +400,28 @@ export function BoardHeader({
         )}
         </div>
         <div className="flex items-center gap-2">
+             <div className="flex items-center">
+                 <TooltipProvider>
+                    <div className="flex -space-x-2 mr-2">
+                        {directMembers.slice(0, 3).map(member => (
+                            <Tooltip key={member.uid}>
+                                <TooltipTrigger asChild>
+                                    <Avatar className="h-8 w-8 border-2 border-background">
+                                        <AvatarImage src={member.photoURL} alt={member.displayName} />
+                                        <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                </TooltipTrigger>
+                                <TooltipContent>{member.displayName}</TooltipContent>
+                            </Tooltip>
+                        ))}
+                    </div>
+                 </TooltipProvider>
+                 {directMembers.length > 3 && (
+                    <Badge variant="secondary" className="mr-2">
+                        +{directMembers.length - 3}
+                    </Badge>
+                 )}
+            </div>
             <Button variant="outline" onClick={() => setIsActivityDrawerOpen(true)}>
                 <History className="mr-2 h-4 w-4" />
                 Activity

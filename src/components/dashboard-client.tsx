@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, AlertTriangle, GripVertical } from "lucide-react";
+import { Loader2, AlertTriangle, GripVertical, Share2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, query, onSnapshot, doc, writeBatch, where, getDocs, orderBy, updateDoc, deleteField, collectionGroup } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
@@ -18,6 +18,9 @@ import { CreateTeamRoomDialog } from "./dashboard/create-team-room-dialog";
 import { ShareTeamRoomDialog } from "./dashboard/share-team-room-dialog";
 import { CreateBoardDialog } from "./dashboard/create-board-dialog";
 import { BoardCard } from "./dashboard/board-card";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Badge } from "./ui/badge";
 
 interface Board extends BoardType {
   id: string;
@@ -325,8 +328,13 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             <Accordion type="multiple" defaultValue={visibleTeamRooms.map(f => f.id)} className="w-full space-y-4">
                  {visibleTeamRooms.map(teamRoom => {
                     const userTeamRoomRole = user ? getTeamRoomEffectiveRole(user.uid, teamRoom, workpanel) : 'viewer';
-                    const canCreateBoardsInRoom = canCreate || userTeamRoomRole === 'manager' || userTeamRoomRole === 'editor';
                     const canManageTeamRoom = userTeamRoomRole === 'manager';
+                    const canCreateBoardsInRoom = canCreate || userTeamRoomRole === 'manager' || userTeamRoomRole === 'editor';
+
+                    const directMembers = Object.keys(teamRoom.members || {})
+                        .map(uid => allUsers.get(uid))
+                        .filter((u): u is UserProfile => !!u);
+
 
                     return (
                         <AccordionItem value={teamRoom.id} key={teamRoom.id} className="border rounded-lg bg-card">
@@ -334,15 +342,39 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                 <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
                                 <span>{teamRoom.name}</span>
                                 </AccordionTrigger>
-                                {canManageTeamRoom && (
-                                    <ShareTeamRoomDialog 
-                                        workpanelId={workpanelId} 
-                                        teamRoom={teamRoom} 
-                                        allUsers={allUsers} 
-                                        workpanelMembers={workpanel?.members || {}}
-                                        onUpdate={fetchAllUsers} 
-                                    />
-                                )}
+                                <div className="flex items-center gap-2">
+                                     <div className="flex items-center">
+                                         <TooltipProvider>
+                                            <div className="flex -space-x-2 mr-2">
+                                                {directMembers.slice(0, 3).map(member => (
+                                                    <Tooltip key={member.uid}>
+                                                        <TooltipTrigger asChild>
+                                                            <Avatar className="h-8 w-8 border-2 border-background">
+                                                                <AvatarImage src={member.photoURL} alt={member.displayName} />
+                                                                <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                                            </Avatar>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>{member.displayName}</TooltipContent>
+                                                    </Tooltip>
+                                                ))}
+                                            </div>
+                                         </TooltipProvider>
+                                         {directMembers.length > 3 && (
+                                            <Badge variant="secondary" className="mr-2">
+                                                +{directMembers.length - 3}
+                                            </Badge>
+                                         )}
+                                    </div>
+                                    {canManageTeamRoom && (
+                                        <ShareTeamRoomDialog 
+                                            workpanelId={workpanelId} 
+                                            teamRoom={teamRoom} 
+                                            allUsers={allUsers} 
+                                            workpanelMembers={workpanel?.members || {}}
+                                            onUpdate={fetchAllUsers} 
+                                        />
+                                    )}
+                                </div>
                             </div>
                             <AccordionContent className="pt-4 px-2">
                                 {renderBoardGrid(visibleBoardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
