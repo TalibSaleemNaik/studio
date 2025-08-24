@@ -152,19 +152,16 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         
         const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
         
-        if (effectiveRole === 'guest' && !boardData.isPrivate) {
+        if (effectiveRole === 'guest' && boardData.isPrivate) {
              const directMember = boardData.members?.[user.uid];
-             if(directMember === 'guest') {
-                setUserRole('guest');
-             } else {
-                setUserRole('viewer');
+             if(!directMember) {
+                setError("You do not have permission to view this private board.");
+                setLoading(false);
+                return;
              }
-        } else if (effectiveRole === 'guest' && boardData.isPrivate) {
-             setError("You do not have permission to view this private board.");
-             setLoading(false);
-             return;
         }
         setUserRole(effectiveRole);
+
 
         // START: Comprehensive member fetching logic
         const memberUIDs = new Set<string>();
@@ -402,6 +399,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
             workpanelId={workpanelId}
             boardId={boardId}
             board={board}
+            setBoard={setBoard}
             boardMembers={boardMembers}
             userRole={userRole}
             activeView={activeView}
@@ -521,3 +519,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    

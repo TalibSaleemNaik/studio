@@ -262,6 +262,7 @@ interface BoardHeaderProps {
     workpanelId: string;
     boardId: string;
     board: Board;
+    setBoard: React.Dispatch<React.SetStateAction<Board | null>>;
     boardMembers: BoardMember[];
     userRole: BoardRole;
     activeView: string;
@@ -284,6 +285,7 @@ export function BoardHeader({
     workpanelId,
     boardId,
     board,
+    setBoard,
     boardMembers,
     userRole,
     activeView,
@@ -302,133 +304,185 @@ export function BoardHeader({
     openCreateGroupDialog,
 }: BoardHeaderProps) {
     const directMembers = boardMembers.filter(m => board.members[m.uid]);
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const [originalBoardName, setOriginalBoardName] = React.useState(board.name);
+    const canEditHeader = userRole === 'manager';
+
+    const handleBoardUpdate = async (field: 'name' | 'description', value: string) => {
+        if (!canEditHeader || !user) return;
+        
+        const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+        try {
+            await updateDoc(boardRef, { [field]: value });
+            if (field === 'name' && value !== originalBoardName) {
+                logActivity(workpanelId, boardId, user, `renamed board to "${value}" (from "${originalBoardName}")`);
+                setOriginalBoardName(value); // Update original name after successful save
+            } else if (field === 'description') {
+                 logActivity(workpanelId, boardId, user, `updated the board description.`);
+            }
+            toast({ title: `Board ${field} updated` });
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: `Failed to update board ${field}` });
+        }
+    }
 
   return (
-    <div className="flex items-center justify-between mb-4 flex-wrap gap-y-4 gap-x-2">
-        <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
-            <Tabs value={activeView} onValueChange={setActiveView}>
-            <TabsList>
-                <TabsTrigger value="kanban"><LayoutGrid className="mr-2 h-4 w-4" />Kanban</TabsTrigger>
-                <TabsTrigger value="table"><List className="mr-2 h-4 w-4" />Table</TabsTrigger>
-            </TabsList>
-        </Tabs>
-        <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-                placeholder="Search tasks..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-40 md:w-60 bg-muted"
-            />
-        </div>
-        <Popover>
-            <PopoverTrigger asChild>
-                <Button variant="outline" className="gap-1">
-                    <span>Assignees</span>
-                    {selectedAssignees.length > 0 && <Badge variant="secondary">{selectedAssignees.length}</Badge>}
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="p-0 w-64">
-                <Command>
-                    <CommandInput placeholder="Filter assignees..." />
-                    <CommandList>
-                        <CommandEmpty>No assignees found.</CommandEmpty>
-                        <CommandGroup>
-                            {boardMembers.map(member => (
-                                <CommandItem 
-                                    key={member.uid} 
-                                    value={member.displayName || member.uid}
-                                    onSelect={() => handleAssigneeSelect(member.uid)}
-                                >
-                                    <Checkbox className="mr-2" checked={selectedAssignees.includes(member.uid)} />
-                                    <Avatar className="h-6 w-6 mr-2">
-                                        <AvatarImage src={member.photoURL} />
-                                        <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                    <span>{member.displayName}</span>
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-            <Popover>
-            <PopoverTrigger asChild>
-                <Button variant="outline" className="gap-1">
-                    <span>Priority</span>
-                        {selectedPriorities.length > 0 && <Badge variant="secondary">{selectedPriorities.length}</Badge>}
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                </Button>
-            </PopoverTrigger>
-                <PopoverContent className="p-0 w-64">
-                <Command>
-                    <CommandInput placeholder="Filter priorities..." />
-                    <CommandList>
-                        <CommandEmpty>No priorities found.</CommandEmpty>
-                        <CommandGroup>
-                            {['low', 'medium', 'high', 'urgent'].map(p => (
-                                <CommandItem 
-                                    key={p}
-                                    value={p}
-                                    onSelect={() => handlePrioritySelect(p)}
-                                >
-                                    <Checkbox className="mr-2" checked={selectedPriorities.includes(p)} />
-                                    <span className="capitalize">{p}</span>
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-        <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-            <SelectTrigger className="w-auto gap-1">
-                <SelectValue placeholder="Filter by due date" />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectItem value="any">Any time</SelectItem>
-                <SelectItem value="due-soon">Due soon (3d)</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
-            </SelectContent>
-        </Select>
-        {hasActiveFilters && (
-            <Button variant="ghost" onClick={clearFilters}>
-                Clear filters
-            </Button>
-        )}
-        </div>
-        <div className="flex items-center gap-2">
-             <div className="flex items-center">
-                 <TooltipProvider>
-                    <div className="flex -space-x-2 mr-2">
-                        {directMembers.slice(0, 3).map(member => (
-                            <Tooltip key={member.uid}>
-                                <TooltipTrigger asChild>
-                                    <Avatar className="h-8 w-8 border-2 border-background">
-                                        <AvatarImage src={member.photoURL} alt={member.displayName} />
-                                        <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                </TooltipTrigger>
-                                <TooltipContent>{member.displayName}</TooltipContent>
-                            </Tooltip>
-                        ))}
-                    </div>
-                 </TooltipProvider>
-                 {directMembers.length > 3 && (
-                    <Badge variant="secondary" className="mr-2">
-                        +{directMembers.length - 3}
-                    </Badge>
-                 )}
+    <div className="space-y-4 mb-4">
+        {/* Top Header: Title, Description, and Sharing */}
+        <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 space-y-1">
+                <Input 
+                    className="h-auto p-0 text-2xl font-bold border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    value={board.name}
+                    onChange={(e) => setBoard({ ...board, name: e.target.value })}
+                    onFocus={(e) => setOriginalBoardName(e.target.value)}
+                    onBlur={(e) => handleBoardUpdate('name', e.target.value)}
+                    disabled={!canEditHeader}
+                />
+                 <Input 
+                    className="h-auto p-0 text-sm text-muted-foreground border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    placeholder="Add a board description..."
+                    value={board.description}
+                    onChange={(e) => setBoard({ ...board, description: e.target.value })}
+                    onBlur={(e) => handleBoardUpdate('description', e.target.value)}
+                    disabled={!canEditHeader}
+                />
             </div>
-            <Button variant="outline" onClick={() => setIsActivityDrawerOpen(true)}>
-                <History className="mr-2 h-4 w-4" />
-                Activity
-            </Button>
-            <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} board={board} boardMembers={boardMembers} userRole={userRole} />
-            {activeView === 'kanban' && userRole === 'manager' && openCreateGroupDialog}
+             <div className="flex items-center gap-2">
+                 <div className="flex items-center">
+                     <TooltipProvider>
+                        <div className="flex -space-x-2 mr-2">
+                            {directMembers.slice(0, 3).map(member => (
+                                <Tooltip key={member.uid}>
+                                    <TooltipTrigger asChild>
+                                        <Avatar className="h-8 w-8 border-2 border-background">
+                                            <AvatarImage src={member.photoURL} alt={member.displayName} />
+                                            <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{member.displayName}</TooltipContent>
+                                </Tooltip>
+                            ))}
+                        </div>
+                     </TooltipProvider>
+                     {directMembers.length > 3 && (
+                        <Badge variant="secondary" className="mr-2">
+                            +{directMembers.length - 3}
+                        </Badge>
+                     )}
+                </div>
+                <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} board={board} boardMembers={boardMembers} userRole={userRole} />
+            </div>
+        </div>
+
+        {/* Bottom Header: Filters and Actions */}
+        <div className="flex items-center justify-between flex-wrap gap-y-2 gap-x-2">
+            <div className="flex items-center gap-2 flex-wrap">
+                <Tabs value={activeView} onValueChange={setActiveView}>
+                <TabsList>
+                    <TabsTrigger value="kanban"><LayoutGrid className="mr-2 h-4 w-4" />Kanban</TabsTrigger>
+                    <TabsTrigger value="table"><List className="mr-2 h-4 w-4" />Table</TabsTrigger>
+                </TabsList>
+            </Tabs>
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Search tasks..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 w-40 md:w-60 bg-muted"
+                />
+            </div>
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-1">
+                        <span>Assignees</span>
+                        {selectedAssignees.length > 0 && <Badge variant="secondary">{selectedAssignees.length}</Badge>}
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-64">
+                    <Command>
+                        <CommandInput placeholder="Filter assignees..." />
+                        <CommandList>
+                            <CommandEmpty>No assignees found.</CommandEmpty>
+                            <CommandGroup>
+                                {boardMembers.map(member => (
+                                    <CommandItem 
+                                        key={member.uid} 
+                                        value={member.displayName || member.uid}
+                                        onSelect={() => handleAssigneeSelect(member.uid)}
+                                    >
+                                        <Checkbox className="mr-2" checked={selectedAssignees.includes(member.uid)} />
+                                        <Avatar className="h-6 w-6 mr-2">
+                                            <AvatarImage src={member.photoURL} />
+                                            <AvatarFallback>{member.displayName?.charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                        <span>{member.displayName}</span>
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+                <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-1">
+                        <span>Priority</span>
+                            {selectedPriorities.length > 0 && <Badge variant="secondary">{selectedPriorities.length}</Badge>}
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                </PopoverTrigger>
+                    <PopoverContent className="p-0 w-64">
+                    <Command>
+                        <CommandInput placeholder="Filter priorities..." />
+                        <CommandList>
+                            <CommandEmpty>No priorities found.</CommandEmpty>
+                            <CommandGroup>
+                                {['low', 'medium', 'high', 'urgent'].map(p => (
+                                    <CommandItem 
+                                        key={p}
+                                        value={p}
+                                        onSelect={() => handlePrioritySelect(p)}
+                                    >
+                                        <Checkbox className="mr-2" checked={selectedPriorities.includes(p)} />
+                                        <span className="capitalize">{p}</span>
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+            <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+                <SelectTrigger className="w-auto gap-1">
+                    <SelectValue placeholder="Filter by due date" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="any">Any time</SelectItem>
+                    <SelectItem value="due-soon">Due soon (3d)</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                </SelectContent>
+            </Select>
+            {hasActiveFilters && (
+                <Button variant="ghost" onClick={clearFilters}>
+                    Clear filters
+                </Button>
+            )}
+            </div>
+            <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setIsActivityDrawerOpen(true)}>
+                    <History className="mr-2 h-4 w-4" />
+                    Activity
+                </Button>
+                {activeView === 'kanban' && userRole === 'manager' && openCreateGroupDialog}
+            </div>
         </div>
     </div>
   )
 }
+
+    
