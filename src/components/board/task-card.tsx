@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { Calendar, MoreHorizontal, Flag } from 'lucide-react';
+import { Calendar, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,29 +12,46 @@ import { Task, BoardMember } from './types';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Progress } from '../ui/progress';
+import { GradientFlag } from './gradient-flag';
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
 
 const priorityConfig = {
     urgent: {
       label: 'Urgent',
-      color: 'text-red-500',
-      gradient: 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-400'
+      gradient: 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-400',
+      stops: [
+        { offset: '0%',  color: '#f43f5e' }, // rose-500
+        { offset: '50%', color: '#ef4444' }, // red-500
+        { offset: '100%',color: '#fb923c' }, // orange-400
+      ],
     },
     high: {
       label: 'High',
-      color: 'text-orange-500',
-      gradient: 'bg-gradient-to-br from-orange-400 via-amber-400 to-yellow-300'
+      gradient: 'bg-gradient-to-br from-orange-400 via-amber-400 to-yellow-300',
+      stops: [
+        { offset: '0%',  color: '#fb923c' }, // orange-400
+        { offset: '50%', color: '#f59e0b' }, // amber-500-ish
+        { offset: '100%',color: '#fde047' }, // yellow-300
+      ],
     },
     medium: {
       label: 'Medium',
-      color: 'text-yellow-500',
-      gradient: 'bg-gradient-to-br from-yellow-500 via-lime-300 to-green-300'
+      gradient: 'bg-gradient-to-br from-yellow-500 via-lime-300 to-green-300',
+       stops: [
+        { offset: '0%',  color: '#eab308' }, // yellow-500
+        { offset: '50%', color: '#bef264' }, // lime-300
+        { offset: '100%',color: '#86efac' }, // green-300
+      ],
     },
     low: {
       label: 'Low',
-      color: 'text-sky-500',
-      gradient: 'bg-gradient-to-br from-green-500 via-teal-400 to-sky-300'
+      gradient: 'bg-gradient-to-br from-green-500 via-teal-400 to-sky-300',
+      stops: [
+        { offset: '0%',  color: '#4ade80' }, // green-400
+        { offset: '50%', color: '#2dd4bf' }, // teal-400
+        { offset: '100%',color: '#38bdf8' }, // sky-400
+      ],
     },
 };
 
@@ -172,9 +189,9 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable, rota
                                             <Badge key={tag} className={cn('text-xs border font-medium', tagColors[i % tagColors.length])}>#{tag}</Badge>
                                         ))}
                                     </div>
-                                     {pConfig && (
-                                        <div className={cn("flex items-center gap-1.5 text-xs font-semibold", pConfig.color)}>
-                                            <Flag className="h-3.5 w-3.5" />
+                                     {pConfig && task.priority && (
+                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                                            <GradientFlag id={`card-flag-${task.id}`} stops={pConfig.stops} className="h-3.5 w-3.5" />
                                             <span>{pConfig.label}</span>
                                         </div>
                                     )}

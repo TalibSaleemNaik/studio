@@ -25,67 +25,18 @@ import { Checkbox } from '../ui/checkbox';
 import { Progress } from '../ui/progress';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Flag } from 'lucide-react';
 import { format } from 'date-fns';
 import { Task, ChecklistItem, Comment, BoardMember, Attachment, BoardRole } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { createNotification } from '@/lib/notification-service';
+import { GradientFlag } from './gradient-flag';
 
 
 const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
-
-
-function GradientFlag({
-    id,
-    stops,
-    className,
-  }: {
-    id: string;
-    stops: { offset: string; color: string }[];
-    className?: string;
-  }) {
-    return (
-      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-        <defs>
-          <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-            {stops.map(s => (
-              <stop key={s.offset} offset={s.offset} stopColor={s.color} />
-            ))}
-          </linearGradient>
-        </defs>
   
-        {/* pole */}
-        <path
-          d="M4 2v20"
-          stroke="#94a3b8"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-  
-        {/* filled flag – slightly overlaps the pole and has a matching stroke to avoid gaps */}
-        <path
-          d="
-            M5.2 4
-            C 8.4 3.2, 10.6 5.2, 13.8 4.5
-            L 18.5 3.8
-            L 18.5 12.2
-            C 15.3 13.0, 13.1 11.0, 10.0 11.7
-            L 5.2 11.7 Z
-          "
-          fill={`url(#${id})`}
-          stroke={`url(#${id})`}
-          strokeWidth="1.25"
-          strokeLinejoin="round"
-          shapeRendering="geometricPrecision"
-        />
-      </svg>
-    );
-  }
-  
-  
-  const priorityConfig = {
+const priorityConfig = {
     low: {
       label: 'Low',
       stops: [
