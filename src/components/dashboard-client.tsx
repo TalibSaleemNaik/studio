@@ -10,7 +10,7 @@ import { collection, query, onSnapshot, doc, writeBatch, where, getDocs, orderBy
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "./ui/skeleton";
-import { UserProfile, Board as BoardType, WorkpanelRole, TeamRoom as TeamRoomType } from "./board/types";
+import { UserProfile, Board as BoardType, WorkpanelRole, TeamRoom as TeamRoomType, TeamRoomRole } from "./board/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { cn } from "@/lib/utils";
@@ -253,6 +253,20 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
     const currentUserRole = user && workpanel ? workpanel.members[user.uid] : undefined;
     const canCreate = currentUserRole === 'admin' || currentUserRole === 'owner' || currentUserRole === 'member';
 
+    const getTeamRoomEffectiveRole = (uid: string, teamRoom: TeamRoom, workpanelData: Workpanel | null): TeamRoomRole => {
+        const directRole = teamRoom.members?.[uid];
+        if (directRole) return directRole;
+
+        if (workpanelData?.members && workpanelData.members[uid]) {
+            const workpanelRole = workpanelData.members[uid];
+            if (workpanelRole === 'owner' || workpanelRole === 'admin') return 'manager';
+            if (workpanelRole === 'member') return 'editor';
+            if (workpanelRole === 'viewer') return 'viewer';
+        }
+        return 'viewer'; // Should not happen for visible rooms, but a safe default.
+    };
+
+
     const renderBoardGrid = (boardsToRender: Board[], teamRoomId: string, canCreateBoardsInRoom: boolean) => {
         return (
             <Droppable droppableId={teamRoomId} type="BOARD">
@@ -310,22 +324,25 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
             )}
             <Accordion type="multiple" defaultValue={visibleTeamRooms.map(f => f.id)} className="w-full space-y-4">
                  {visibleTeamRooms.map(teamRoom => {
-                    const userTeamRoomRole = user?.uid ? teamRoom.members?.[user.uid] : undefined;
+                    const userTeamRoomRole = user ? getTeamRoomEffectiveRole(user.uid, teamRoom, workpanel) : 'viewer';
                     const canCreateBoardsInRoom = canCreate || userTeamRoomRole === 'manager' || userTeamRoomRole === 'editor';
-                     
+                    const canManageTeamRoom = userTeamRoomRole === 'manager';
+
                     return (
                         <AccordionItem value={teamRoom.id} key={teamRoom.id} className="border rounded-lg bg-card">
                             <div className="flex items-center justify-between px-4 py-3 rounded-t-lg data-[state=open]:border-b hover:bg-muted/50">
                                 <AccordionTrigger className="text-xl font-headline font-semibold hover:no-underline flex-1 text-left py-0">
                                 <span>{teamRoom.name}</span>
                                 </AccordionTrigger>
-                                <ShareTeamRoomDialog 
-                                    workpanelId={workpanelId} 
-                                    teamRoom={teamRoom} 
-                                    allUsers={allUsers} 
-                                    workpanelMembers={workpanel?.members || {}}
-                                    onUpdate={fetchAllUsers} 
-                                />
+                                {canManageTeamRoom && (
+                                    <ShareTeamRoomDialog 
+                                        workpanelId={workpanelId} 
+                                        teamRoom={teamRoom} 
+                                        allUsers={allUsers} 
+                                        workpanelMembers={workpanel?.members || {}}
+                                        onUpdate={fetchAllUsers} 
+                                    />
+                                )}
                             </div>
                             <AccordionContent className="pt-4 px-2">
                                 {renderBoardGrid(visibleBoardsByTeamRoom[teamRoom.id] || [], teamRoom.id, canCreateBoardsInRoom)}
