@@ -246,28 +246,26 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className="flex-1 flex flex-col transition-colors rounded-lg min-h-[150px]"
-                                    >
-                                        <div className={cn(
-                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3',
+                                        className={cn(
+                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 transition-colors rounded-lg min-h-[150px]',
                                             snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
-                                        )}>
-                                            {column.items.map((item, index) => {
-                                                const isAssigned = item.assignees?.includes(user!.uid);
-                                                const isDraggable = userRole === 'manager' || (userRole === 'editor' && isAssigned) || (userRole === 'guest' && isAssigned);
-                                                return (
-                                                    <TaskCard
-                                                        key={item.id}
-                                                        task={item}
-                                                        index={index}
-                                                        boardMembers={boardMembers}
-                                                        onClick={() => onTaskClick(item)}
-                                                        isDraggable={isDraggable}
-                                                    />
-                                                );
-                                            })}
-                                            {provided.placeholder}
-                                        </div>
+                                        )}
+                                    >
+                                        {column.items.map((item, index) => {
+                                            const isAssigned = item.assignees?.includes(user!.uid);
+                                            const isDraggable = userRole === 'manager' || (userRole === 'editor' && isAssigned) || (userRole === 'guest' && isAssigned);
+                                            return (
+                                                <TaskCard
+                                                    key={item.id}
+                                                    task={item}
+                                                    index={index}
+                                                    boardMembers={boardMembers}
+                                                    onClick={() => onTaskClick(item)}
+                                                    isDraggable={isDraggable}
+                                                />
+                                            );
+                                        })}
+                                        {provided.placeholder}
                                         <QuickAdd column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                                     </div>
                                 )}
