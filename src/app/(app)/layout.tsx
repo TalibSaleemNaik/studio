@@ -32,7 +32,7 @@ function AppLayout({
                 <UserNav />
              </div>
            </header>
-           <main className="flex flex-col flex-1 gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 min-w-0">
+           <main className="flex flex-col flex-1 gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 min-w-0 pb-4">
              {children}
            </main>
         </div>
