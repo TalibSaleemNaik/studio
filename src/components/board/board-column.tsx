@@ -227,11 +227,11 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                 <div
                     ref={provided.innerRef}
                     {...provided.draggableProps}
-                    className="shrink-0 w-80 flex flex-col"
+                    className="shrink-0 w-80 flex flex-col rounded-lg overflow-hidden"
                 >
                     <div
                         {...provided.dragHandleProps}
-                        className={cn("flex justify-between items-center p-3 rounded-t-lg", color)}
+                        className={cn("flex justify-between items-center p-3", color)}
                     >
                         <div className='flex items-center gap-2'>
                             <h2 className="text-md font-semibold text-white">{column.name}</h2>
@@ -240,7 +240,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                         <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                     </div>
                     <div
-                        className="rounded-b-lg flex flex-col h-full"
+                        className="flex flex-col h-full"
                         style={{ backgroundColor: '#373955' }}
                     >
                         <div className="flex-1 flex flex-col min-h-0 p-3">
@@ -250,7 +250,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
                                         className={cn(
-                                            'flex-1 space-y-3 overflow-y-auto transition-colors rounded-lg min-h-[150px] p-1',
+                                            'flex-1 space-y-3 overflow-y-auto transition-colors rounded-lg min-h-[150px] p-2',
                                             snapshot.isDraggingOver && "bg-primary/10"
                                         )}
                                     >
