@@ -97,7 +97,9 @@ export function TaskCard({ task, index, boardMembers, onClick, isDraggable }: { 
             {(provided, snapshot) => {
                 const style = {
                     ...provided.draggableProps.style,
-                    ...(snapshot.isDragging && { transform: `${provided.draggableProps.style?.transform} rotate(3deg)` }),
+                    transform: snapshot.isDragging
+                        ? `${provided.draggableProps.style?.transform} rotate(3deg)`
+                        : provided.draggableProps.style?.transform,
                 };
 
                 return (
