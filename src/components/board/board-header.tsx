@@ -309,47 +309,11 @@ export function BoardHeader({
     const [originalBoardName, setOriginalBoardName] = React.useState(board.name);
     const canEditHeader = userRole === 'manager';
 
-    const handleBoardUpdate = async (field: 'name' | 'description', value: string) => {
-        if (!canEditHeader || !user) return;
-        
-        const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
-        try {
-            await updateDoc(boardRef, { [field]: value });
-            if (field === 'name' && value !== originalBoardName) {
-                logActivity(workpanelId, boardId, user, `renamed board to "${value}" (from "${originalBoardName}")`);
-                setOriginalBoardName(value); // Update original name after successful save
-            } else if (field === 'description') {
-                 logActivity(workpanelId, boardId, user, `updated the board description.`);
-            }
-            toast({ title: `Board ${field} updated` });
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: `Failed to update board ${field}` });
-        }
-    }
-
   return (
     <div className="space-y-4 mb-4">
         {/* Top Header: Title, Description, and Sharing */}
         <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 space-y-1">
-                <Input 
-                    className="h-auto p-0 text-2xl font-bold border-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                    value={board.name}
-                    onChange={(e) => setBoard({ ...board, name: e.target.value })}
-                    onFocus={(e) => setOriginalBoardName(e.target.value)}
-                    onBlur={(e) => handleBoardUpdate('name', e.target.value)}
-                    disabled={!canEditHeader}
-                />
-                 <Input 
-                    className="h-auto p-0 text-sm text-muted-foreground border-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                    placeholder="Add a board description..."
-                    value={board.description}
-                    onChange={(e) => setBoard({ ...board, description: e.target.value })}
-                    onBlur={(e) => handleBoardUpdate('description', e.target.value)}
-                    disabled={!canEditHeader}
-                />
-            </div>
+            <h1 className="text-2xl font-bold flex-1">{board.name}</h1>
              <div className="flex items-center gap-2">
                  <div className="flex items-center">
                      <TooltipProvider>
@@ -484,5 +448,3 @@ export function BoardHeader({
     </div>
   )
 }
-
-    
