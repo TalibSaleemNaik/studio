@@ -308,10 +308,12 @@ export function BoardHeader({
     const { toast } = useToast();
     const [originalBoardName, setOriginalBoardName] = React.useState(board.name);
     const canEditHeader = userRole === 'manager';
+    const titleRef = React.useRef<HTMLHeadingElement>(null);
 
   const handleTitleBlur = async () => {
-    if (!canEditHeader) return;
-    const newName = board.name.trim();
+    if (!canEditHeader || !titleRef.current) return;
+    
+    const newName = titleRef.current.innerText.trim();
     if (newName && newName !== originalBoardName) {
       try {
         const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
@@ -322,28 +324,42 @@ export function BoardHeader({
         }
         toast({ title: "Board renamed successfully" });
         setOriginalBoardName(newName);
+        setBoard(prev => prev ? { ...prev, name: newName } : null);
+
       } catch (error) {
         toast({ variant: 'destructive', title: 'Failed to rename board' });
-        setBoard(prev => prev ? { ...prev, name: originalBoardName } : null);
+        if(titleRef.current) titleRef.current.innerText = originalBoardName;
       }
-    } else if (newName === '') { // Prevent blank name
-        setBoard(prev => prev ? { ...prev, name: originalBoardName } : null);
+    } else if (newName === '') {
+        if(titleRef.current) titleRef.current.innerText = originalBoardName;
     }
   };
+  
+  // Prevents creating new lines in the h1 tag
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLHeadingElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  }
   
   return (
     <div className="space-y-4 mb-4">
         {/* Top Header: Title, Description, and Sharing */}
-        <div className="flex items-center justify-between gap-4">
-             <Input 
-                value={board.name}
-                onChange={(e) => setBoard(prev => prev ? { ...prev, name: e.target.value } : null)}
-                onFocus={() => setOriginalBoardName(board.name)}
-                onBlur={handleTitleBlur}
-                disabled={!canEditHeader}
-                className="font-headline text-3xl font-bold border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
-                aria-label="Board title"
-            />
+        <div className="flex items-start justify-between gap-4">
+             <div className="flex-1 min-w-0">
+                <h1
+                    ref={titleRef}
+                    contentEditable={canEditHeader}
+                    suppressContentEditableWarning={true}
+                    onFocus={() => setOriginalBoardName(titleRef.current?.innerText || '')}
+                    onBlur={handleTitleBlur}
+                    onKeyDown={handleTitleKeyDown}
+                    className="font-headline text-3xl font-bold outline-none focus:ring-2 focus:ring-ring rounded-md px-1 -mx-1"
+                >
+                    {board.name}
+                </h1>
+            </div>
              <div className="flex items-center gap-2">
                  <div className="flex items-center">
                      <TooltipProvider>
