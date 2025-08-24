@@ -246,10 +246,10 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className="flex-1 flex flex-col transition-colors rounded-lg"
+                                        className="flex-1 flex flex-col transition-colors rounded-lg min-h-[150px]"
                                     >
                                         <div className={cn(
-                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 min-h-[150px]',
+                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3',
                                             snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
                                         )}>
                                             {column.items.map((item, index) => {
@@ -279,4 +279,3 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
         </Draggable>
     );
 }
-
