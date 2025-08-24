@@ -42,9 +42,6 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
     
     let tasksToFilter = allTasks;
-    if (userRole === 'viewer' && user) {
-        tasksToFilter = allTasks.filter(item => item.assignees?.includes(user.uid));
-    }
 
     return tasksToFilter.filter(item => {
         const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
@@ -71,7 +68,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         
         return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
     });
-  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter, userRole, user]);
+  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
 
   const filteredColumns = React.useMemo(() => {
       if (!columns) return {};
@@ -151,8 +148,10 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         
         const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
         
-        if (effectiveRole === 'guest') {
-             setError("You do not have permission to view this board.");
+        if (effectiveRole === 'guest' && !boardData.isPrivate) {
+            setUserRole('viewer');
+        } else if (effectiveRole === 'guest' && boardData.isPrivate) {
+             setError("You do not have permission to view this private board.");
              setLoading(false);
              return;
         }
@@ -507,3 +506,5 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
+
+    
