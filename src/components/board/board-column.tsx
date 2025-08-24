@@ -247,9 +247,10 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
                                         className={cn(
-                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 transition-colors rounded-lg min-h-[150px]',
-                                            snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
+                                            'flex-1 space-y-3 overflow-y-auto pr-2 -mr-3 transition-colors rounded-lg min-h-[150px] p-2',
+                                            snapshot.isDraggingOver && "bg-primary/10"
                                         )}
+                                        style={{ backgroundColor: '#373955' }}
                                     >
                                         {column.items.map((item, index) => {
                                             const isAssigned = item.assignees?.includes(user!.uid);
