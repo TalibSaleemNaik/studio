@@ -341,7 +341,7 @@ export function BoardHeader({
                 onFocus={() => setOriginalBoardName(board.name)}
                 onBlur={handleTitleBlur}
                 disabled={!canEditHeader}
-                className="text-2xl font-bold border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
+                className="font-headline text-3xl font-bold border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 p-0 h-auto bg-transparent"
                 aria-label="Board title"
             />
              <div className="flex items-center gap-2">
