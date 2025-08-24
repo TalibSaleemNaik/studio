@@ -309,11 +309,41 @@ export function BoardHeader({
     const [originalBoardName, setOriginalBoardName] = React.useState(board.name);
     const canEditHeader = userRole === 'manager';
 
+  const handleTitleBlur = async () => {
+    if (!canEditHeader) return;
+    const newName = board.name.trim();
+    if (newName && newName !== originalBoardName) {
+      try {
+        const boardRef = doc(db, `workspaces/${workpanelId}/boards`, boardId);
+        await updateDoc(boardRef, { name: newName });
+        if (user) {
+          const simpleUser: SimpleUser = { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL };
+          await logActivity(workpanelId, boardId, simpleUser, `renamed the board to "${newName}" (from "${originalBoardName}")`);
+        }
+        toast({ title: "Board renamed successfully" });
+        setOriginalBoardName(newName);
+      } catch (error) {
+        toast({ variant: 'destructive', title: 'Failed to rename board' });
+        setBoard(prev => prev ? { ...prev, name: originalBoardName } : null);
+      }
+    } else {
+      setBoard(prev => prev ? { ...prev, name: originalBoardName } : null);
+    }
+  };
+  
   return (
     <div className="space-y-4 mb-4">
         {/* Top Header: Title, Description, and Sharing */}
-        <div className="flex items-start justify-between gap-4">
-            <h1 className="text-2xl font-bold flex-1">{board.name}</h1>
+        <div className="flex items-center justify-between gap-4">
+             <Input 
+                value={board.name}
+                onChange={(e) => setBoard(prev => prev ? { ...prev, name: e.target.value } : null)}
+                onFocus={() => setOriginalBoardName(board.name)}
+                onBlur={handleTitleBlur}
+                disabled={!canEditHeader}
+                className="text-2xl font-bold border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 p-0 h-auto"
+                aria-label="Board title"
+            />
              <div className="flex items-center gap-2">
                  <div className="flex items-center">
                      <TooltipProvider>
@@ -448,3 +478,5 @@ export function BoardHeader({
     </div>
   )
 }
+
+    
