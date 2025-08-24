@@ -230,19 +230,19 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                     className="shrink-0 w-80 flex flex-col"
                 >
                     <div
-                        className="rounded-lg flex flex-col h-full p-3"
+                        {...provided.dragHandleProps}
+                        className={cn("flex justify-between items-center p-3 rounded-t-lg", color)}
+                    >
+                        <div className='flex items-center gap-2'>
+                            <h2 className="text-md font-semibold text-white">{column.name}</h2>
+                            <span className="text-sm font-medium bg-white/20 text-white px-2 py-0.5 rounded-md">{column.items.length}</span>
+                        </div>
+                        <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
+                    </div>
+                    <div
+                        className="rounded-b-lg flex flex-col h-full p-3"
                         style={{ backgroundColor: '#373955' }}
                     >
-                        <div
-                            {...provided.dragHandleProps}
-                            className={cn("flex justify-between items-center p-3 rounded-lg mb-4", color)}
-                        >
-                            <div className='flex items-center gap-2'>
-                                <h2 className="text-md font-semibold text-white">{column.name}</h2>
-                                <span className="text-sm font-medium bg-white/20 text-white px-2 py-0.5 rounded-md">{column.items.length}</span>
-                            </div>
-                            <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
-                        </div>
                         <div className="flex-1 flex flex-col min-h-0">
                             <Droppable droppableId={column.id} type="TASK" isDropDisabled={!isDroppable}>
                                 {(provided, snapshot) => (
