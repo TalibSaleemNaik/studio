@@ -34,6 +34,7 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
     const { toast } = useToast();
 
     const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState<WorkpanelRole>('member');
     const [isInviting, setIsInviting] = useState(false);
 
     const [memberToRemove, setMemberToRemove] = useState<WorkpanelMember | null>(null);
@@ -114,7 +115,7 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
 
             const workpanelRef = doc(db, `workspaces/${workpanelId}`);
             await updateDoc(workpanelRef, {
-                [`members.${userId}`]: 'member' // Default role is 'member'
+                [`members.${userId}`]: inviteRole
             });
 
             toast({ title: 'User invited successfully!' });
@@ -235,10 +236,21 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
                         value={inviteEmail}
                         onChange={(e) => setInviteEmail(e.target.value)}
                         disabled={isInviting}
+                        className="flex-1"
                     />
+                    <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as WorkpanelRole)}>
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="member">Member</SelectItem>
+                            <SelectItem value="viewer">Viewer</SelectItem>
+                        </SelectContent>
+                    </Select>
                     <Button onClick={handleInvite} disabled={isInviting}>
                         {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                        Invite Member
+                        Invite
                     </Button>
                 </div>
 
@@ -313,3 +325,5 @@ export function MemberManagement({ workpanelId }: { workpanelId: string }) {
         </>
     );
 }
+
+    

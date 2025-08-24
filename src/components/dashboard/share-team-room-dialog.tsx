@@ -25,6 +25,7 @@ interface ShareTeamRoomDialogProps {
 export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanelMembers, onUpdate }: ShareTeamRoomDialogProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState<TeamRoomRole>('editor');
     const [isInviting, setIsInviting] = useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
@@ -65,7 +66,7 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
                 const userDocRef = doc(db, `users`, userToInviteId);
 
                 transaction.update(teamRoomRef, {
-                    [`members.${userToInviteId}`]: 'editor',
+                    [`members.${userToInviteId}`]: inviteRole,
                     memberUids: arrayUnion(userToInviteId),
                 });
 
@@ -182,7 +183,18 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
                             value={inviteEmail}
                             onChange={(e) => setInviteEmail(e.target.value)}
                             disabled={isInviting}
+                            className="flex-1"
                         />
+                        <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as TeamRoomRole)}>
+                            <SelectTrigger className="w-[120px]">
+                                <SelectValue placeholder="Select a role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="manager">Manager</SelectItem>
+                                <SelectItem value="editor">Editor</SelectItem>
+                                <SelectItem value="viewer">Viewer</SelectItem>
+                            </SelectContent>
+                        </Select>
                         <Button onClick={handleInvite} disabled={isInviting}>
                             {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Invite'}
                         </Button>
@@ -237,3 +249,5 @@ export function ShareTeamRoomDialog({ workpanelId, teamRoom, allUsers, workpanel
         </Dialog>
     )
 }
+
+    

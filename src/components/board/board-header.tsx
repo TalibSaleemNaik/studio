@@ -23,6 +23,7 @@ import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '../ui/
 
 function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRole }: { workpanelId: string, boardId: string, board: Board, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
+    const [inviteRole, setInviteRole] = React.useState<BoardRole>('editor');
     const [isInviting, setIsInviting] = React.useState(false);
     const { toast } = useToast();
     const { user } = useAuth();
@@ -65,7 +66,7 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
                 const userDocRef = doc(db, `users`, userId);
 
                 transaction.update(boardTransactionRef, {
-                    [`members.${userId}`]: 'editor',
+                    [`members.${userId}`]: inviteRole,
                     memberUids: arrayUnion(userId)
                 });
                  transaction.update(userDocRef, {
@@ -200,7 +201,19 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
                                 value={inviteEmail}
                                 onChange={(e) => setInviteEmail(e.target.value)}
                                 disabled={isInviting}
+                                className="flex-1"
                             />
+                             <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as BoardRole)}>
+                                <SelectTrigger className="w-[120px]">
+                                    <SelectValue placeholder="Select a role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="manager">Manager</SelectItem>
+                                    <SelectItem value="editor">Editor</SelectItem>
+                                    <SelectItem value="viewer">Viewer</SelectItem>
+                                    <SelectItem value="guest">Guest</SelectItem>
+                                </SelectContent>
+                            </Select>
                             <Button onClick={handleInvite} disabled={isInviting}>
                                 {isInviting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Invite'}
                             </Button>
@@ -494,3 +507,5 @@ export function BoardHeader({
     </div>
   )
 }
+
+    
