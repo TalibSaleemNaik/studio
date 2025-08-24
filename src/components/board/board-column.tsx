@@ -229,10 +229,10 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                     {...provided.draggableProps}
                     className="shrink-0 w-80 flex flex-col"
                 >
-                    <div className="bg-muted/30 rounded-lg flex flex-col h-full">
+                    <div className="bg-muted/30 rounded-lg flex flex-col h-full p-3">
                         <div
                             {...provided.dragHandleProps}
-                            className={cn("flex justify-between items-center p-3 rounded-t-lg", color)}
+                            className={cn("flex justify-between items-center p-3 rounded-lg mb-4", color)}
                         >
                             <div className='flex items-center gap-2'>
                                 <h2 className="text-md font-semibold text-white">{column.name}</h2>
@@ -240,7 +240,7 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                             </div>
                             <ColumnMenu column={column} workpanelId={workpanelId} boardId={boardId} userRole={userRole} />
                         </div>
-                        <div className="p-3 flex-1 flex flex-col">
+                        <div className="flex-1 flex flex-col min-h-0">
                             <Droppable droppableId={column.id} type="TASK" isDropDisabled={!isDroppable}>
                                 {(provided, snapshot) => (
                                     <div
