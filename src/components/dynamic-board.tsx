@@ -18,6 +18,25 @@ import { logActivity } from '@/lib/activity-logger';
 import { ActivityDrawer } from './board/activity-drawer';
 import { TableView } from './board/table-view';
 import { BoardHeader } from './board/board-header';
+import { Columns as ColumnsIcon } from 'lucide-react';
+import { Button } from './ui/button';
+
+function EmptyBoardState({ createGroupDialog }: { createGroupDialog: React.ReactNode }) {
+    return (
+        <div className="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed bg-muted/50">
+            <div className="text-center">
+                <ColumnsIcon className="mx-auto h-12 w-12 text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-semibold">This board is empty!</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Get started by creating your first column.
+                </p>
+                <div className="mt-6">
+                    {createGroupDialog}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string }) {
   const { user } = useAuth();
@@ -37,6 +56,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   const { toast } = useToast();
 
   const allTasks = React.useMemo(() => columns ? Object.values(columns).flatMap(c => c.items) : [], [columns]);
+  const allColumns = React.useMemo(() => columns ? Object.values(columns).sort((a,b) => a.order - b.order) : [], [columns]);
 
   const filteredTasks = React.useMemo(() => {
     const asJsDate = (d: any) => (d?.toDate ? d.toDate() : d);
@@ -392,6 +412,15 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
   }
 
   const hasActiveFilters = searchTerm || selectedAssignees.length > 0 || selectedPriorities.length > 0 || dueDateFilter !== 'any';
+  
+  const createGroupDialog = (
+    <CreateGroupDialog 
+        workpanelId={workpanelId}
+        boardId={boardId}
+        columnCount={allColumns.length}
+        userRole={userRole}
+    />
+  );
 
   return (
       <div className="flex flex-col flex-1 min-h-0">
@@ -415,14 +444,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
             hasActiveFilters={hasActiveFilters}
             clearFilters={clearFilters}
             setIsActivityDrawerOpen={setIsActivityDrawerOpen}
-            openCreateGroupDialog={
-                <CreateGroupDialog 
-                    workpanelId={workpanelId}
-                    boardId={boardId}
-                    columnCount={orderedColumns.length}
-                    userRole={userRole}
-                />
-            }
+            openCreateGroupDialog={createGroupDialog}
         />
        
         {selectedTask && (
@@ -443,7 +465,10 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
             isOpen={isActivityDrawerOpen}
             onOpenChange={setIsActivityDrawerOpen}
         />
-        {activeView === 'kanban' ? (
+
+        {allColumns.length === 0 && activeView === 'kanban' ? (
+             <EmptyBoardState createGroupDialog={createGroupDialog} />
+        ) : activeView === 'kanban' ? (
             <DragDropContext onDragEnd={onDragEnd}>
                 <Droppable droppableId="board" type="COLUMN" direction="horizontal">
                 {(provided) => (
