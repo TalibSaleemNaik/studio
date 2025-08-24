@@ -82,7 +82,7 @@ export interface Board {
     workpanelId?: string;
 }
 
-export type BoardRole = 'manager' | 'editor' | 'viewer';
+export type BoardRole = 'manager' | 'editor' | 'viewer' | 'guest';
 
 
 export interface Comment {

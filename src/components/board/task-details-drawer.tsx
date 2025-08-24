@@ -59,7 +59,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
     const { toast } = useToast();
     
     const isAssignedToCurrentUser = user ? task.assignees?.includes(user.uid) : false;
-    const canEditTask = userRole === 'manager' || (userRole === 'editor' && isAssignedToCurrentUser);
+    const canEditTask = userRole === 'manager' || (userRole === 'editor' && isAssignedToCurrentUser) || (userRole === 'guest' && isAssignedToCurrentUser);
     const isViewer = userRole === 'viewer';
     
     const checklistProgress = React.useMemo(() => {
@@ -663,7 +663,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                                     </div>
                                 ))}
                             </div>
-                            {!isViewer && (
+                            {!isViewer && !isViewer && (
                                 <form onSubmit={handlePostComment} className="flex items-start gap-3">
                                     <Avatar className="h-8 w-8">
                                         <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || ''} />
@@ -708,7 +708,7 @@ export function TaskDetailsDrawer({ task, workspaceId: workpanelId, boardId, boa
                             </AlertDialogContent>
                         </AlertDialog>
                     )}
-                     {!canEditTask && userRole === 'editor' && (
+                     {(!canEditTask && (userRole === 'editor' || userRole === 'guest')) && (
                         <div className='mr-auto flex items-center gap-2 text-sm text-muted-foreground'>
                             <Lock className='h-4 w-4' />
                             <span>Assign this task to yourself to edit it.</span>

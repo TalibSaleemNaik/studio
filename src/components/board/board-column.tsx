@@ -154,7 +154,7 @@ function QuickAdd({ column, workpanelId, boardId, userRole }: { column: Column, 
     const { toast } = useToast();
     const { user } = useAuth();
     
-    if (userRole === 'viewer') {
+    if (userRole === 'viewer' || userRole === 'guest') {
         return null;
     }
 
@@ -218,8 +218,8 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
     const { user } = useAuth();
     
     // A manager can drop any task anywhere.
-    // An editor can also drop anywhere, but the individual task cards will control if they can be picked up.
-    const isDroppable = (userRole === 'manager') || (userRole === 'editor');
+    // An editor or guest can also drop anywhere, but the individual task cards will control if they can be picked up.
+    const isDroppable = userRole === 'manager' || userRole === 'editor' || userRole === 'guest';
     
     return (
         <Draggable draggableId={column.id} index={index} isDragDisabled={userRole !== 'manager'}>
@@ -255,7 +255,8 @@ export function BoardColumn({ column, index, boardMembers, onTaskClick, workpane
                                         snapshot.isDraggingOver && "bg-primary/10 rounded-lg"
                                     )}>
                                         {column.items.map((item, index) => {
-                                            const isDraggable = userRole === 'manager' || (userRole === 'editor' && item.assignees?.includes(user!.uid));
+                                            const isAssigned = item.assignees?.includes(user!.uid);
+                                            const isDraggable = userRole === 'manager' || (userRole === 'editor' && isAssigned) || (userRole === 'guest' && isAssigned);
                                             return (
                                                 <TaskCard
                                                     key={item.id}

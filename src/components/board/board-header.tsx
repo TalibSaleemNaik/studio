@@ -228,6 +228,7 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
                                             <SelectItem value="manager">Manager</SelectItem>
                                             <SelectItem value="editor">Editor</SelectItem>
                                             <SelectItem value="viewer">Viewer</SelectItem>
+                                            <SelectItem value="guest">Guest</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveMember(member.uid)} disabled={user?.uid === member.uid}>

@@ -43,6 +43,10 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     
     let tasksToFilter = allTasks;
 
+    if (userRole === 'guest' && user) {
+        tasksToFilter = tasksToFilter.filter(task => task.assignees?.includes(user.uid));
+    }
+
     return tasksToFilter.filter(item => {
         const searchMatch = item.content.toLowerCase().includes(searchTerm.toLowerCase());
         
@@ -68,7 +72,7 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         
         return searchMatch && assigneeMatch && priorityMatch && dueDateMatch();
     });
-  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter]);
+  }, [allTasks, searchTerm, selectedAssignees, selectedPriorities, dueDateFilter, userRole, user]);
 
   const filteredColumns = React.useMemo(() => {
       if (!columns) return {};
@@ -149,7 +153,12 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         const effectiveRole = calculateEffectiveRole(user.uid, boardData, teamRoomData, workpanelData);
         
         if (effectiveRole === 'guest' && !boardData.isPrivate) {
-            setUserRole('viewer');
+             const directMember = boardData.members?.[user.uid];
+             if(directMember === 'guest') {
+                setUserRole('guest');
+             } else {
+                setUserRole('viewer');
+             }
         } else if (effectiveRole === 'guest' && boardData.isPrivate) {
              setError("You do not have permission to view this private board.");
              setLoading(false);
@@ -250,10 +259,16 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
         toast({ variant: "destructive", title: "Permission Denied", description: "Only managers can reorder columns." });
         return;
     }
-    if (type === 'TASK' && userRole === 'editor') {
+    if (type === 'TASK') {
         const task = allTasks.find(t => t.id === draggableId);
-        if (!task || !task.assignees?.includes(user.uid)) {
+        const isAssigned = task?.assignees?.includes(user.uid);
+
+        if (userRole === 'editor' && !isAssigned) {
             toast({ variant: "destructive", title: "Permission Denied", description: "You can only move tasks assigned to you." });
+            return;
+        }
+        if (userRole === 'guest' && !isAssigned) {
+            toast({ variant: "destructive", title: "Permission Denied", description: "As a guest, you can only move your own tasks." });
             return;
         }
     }
@@ -350,8 +365,8 @@ function Board({ boardId, workpanelId }: { boardId: string, workpanelId: string 
     );
   }
   
-  if (!columns || !board || userRole === 'guest') {
-    return <BoardSkeleton />;
+  if (!columns || !board || (userRole === 'guest' && !board.members[user!.uid])) {
+     return <BoardSkeleton />;
   }
 
   const orderedColumns = Object.values(filteredColumns).sort((a,b) => a.order - b.order);
@@ -506,5 +521,3 @@ export const DynamicBoard = dynamic(() => Promise.resolve(Board), {
   ssr: false,
   loading: () => <BoardSkeleton />,
 });
-
-    
