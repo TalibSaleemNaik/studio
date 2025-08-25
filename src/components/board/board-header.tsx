@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { collection, doc, query, where, getDocs, runTransaction, arrayUnion, updateDoc, deleteField, arrayRemove, getDoc } from 'firebase/firestore';
 import { logActivity, SimpleUser } from '@/lib/activity-logger';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
+import { cn } from '@/lib/utils';
 
 function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRole }: { workpanelId: string, boardId: string, board: Board, boardMembers: BoardMember[], userRole: BoardRole }) {
     const [inviteEmail, setInviteEmail] = React.useState('');
@@ -340,7 +341,6 @@ export function BoardHeader({
     setIsActivityDrawerOpen,
     openCreateGroupDialog,
 }: BoardHeaderProps) {
-    const directMembers = boardMembers.filter(m => board.members[m.uid]);
     const { user } = useAuth();
     const { toast } = useToast();
     const [originalBoardName, setOriginalBoardName] = React.useState(board.name);
@@ -372,7 +372,6 @@ export function BoardHeader({
     }
   };
   
-  // Prevents creating new lines in the h1 tag
   const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLHeadingElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -382,9 +381,8 @@ export function BoardHeader({
   
   return (
     <div className="space-y-4 mb-4">
-        {/* Top Header: Title, Description, and Sharing */}
-        <div className="flex items-start justify-between gap-4">
-             <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
                 <h1
                     ref={titleRef}
                     contentEditable={canEditHeader}
@@ -396,6 +394,36 @@ export function BoardHeader({
                 >
                     {board.name}
                 </h1>
+                <TooltipProvider>
+                    <div className="flex items-center rounded-md border bg-secondary/50 p-0.5">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant={activeView === 'kanban' ? 'secondary' : 'ghost'}
+                                    size="icon"
+                                    onClick={() => setActiveView('kanban')}
+                                    className="h-8 w-8"
+                                >
+                                    <LayoutGrid />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Kanban View</TooltipContent>
+                        </Tooltip>
+                         <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant={activeView === 'table' ? 'secondary' : 'ghost'}
+                                    size="icon"
+                                    onClick={() => setActiveView('table')}
+                                    className="h-8 w-8"
+                                >
+                                    <List />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Table View</TooltipContent>
+                        </Tooltip>
+                    </div>
+                </TooltipProvider>
             </div>
              <div className="flex items-center gap-2">
                 <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} board={board} boardMembers={boardMembers} userRole={userRole} />
@@ -406,15 +434,8 @@ export function BoardHeader({
             </div>
         </div>
 
-        {/* Bottom Header: Filters and Actions */}
         <div className="flex items-center justify-between flex-wrap gap-y-2 gap-x-2">
             <div className="flex items-center gap-2 flex-wrap">
-                <Tabs value={activeView} onValueChange={setActiveView}>
-                <TabsList>
-                    <TabsTrigger value="kanban"><LayoutGrid className="mr-2 h-4 w-4" />Kanban</TabsTrigger>
-                    <TabsTrigger value="table"><List className="mr-2 h-4 w-4" />Table</TabsTrigger>
-                </TabsList>
-            </Tabs>
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -509,6 +530,3 @@ export function BoardHeader({
     </div>
   )
 }
-
-    
-    
