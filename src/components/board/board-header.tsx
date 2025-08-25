@@ -205,7 +205,7 @@ function BoardMembersDialog({ workpanelId, boardId, board, boardMembers, userRol
                            </Badge>
                         )}
                    </div>
-                   <Button variant="ghost" size="sm" className="ml-2">
+                   <Button variant="ghost" size="sm">
                        <Share className="mr-2 h-4 w-4" /> Share
                    </Button>
                 </div>
@@ -399,6 +399,10 @@ export function BoardHeader({
             </div>
              <div className="flex items-center gap-2">
                 <BoardMembersDialog workpanelId={workpanelId} boardId={boardId} board={board} boardMembers={boardMembers} userRole={userRole} />
+                <Button variant="outline" onClick={() => setIsActivityDrawerOpen(true)}>
+                    <History className="mr-2 h-4 w-4" />
+                    Activity
+                </Button>
             </div>
         </div>
 
@@ -499,10 +503,6 @@ export function BoardHeader({
             )}
             </div>
             <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => setIsActivityDrawerOpen(true)}>
-                    <History className="mr-2 h-4 w-4" />
-                    Activity
-                </Button>
                 {activeView === 'kanban' && userRole === 'manager' && openCreateGroupDialog}
             </div>
         </div>
