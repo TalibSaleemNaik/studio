@@ -343,9 +343,9 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                 <span>{teamRoom.name}</span>
                                 </AccordionTrigger>
                                 <div className="flex items-center gap-2">
-                                     <div className="flex items-center">
+                                     <div className="flex items-center pl-2 pr-1 py-1 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer">
                                          <TooltipProvider>
-                                            <div className="flex -space-x-2 mr-2">
+                                            <div className="flex -space-x-2">
                                                 {directMembers.slice(0, 3).map(member => (
                                                     <Tooltip key={member.uid}>
                                                         <TooltipTrigger asChild>
@@ -360,20 +360,20 @@ export function DashboardClient({ workpanelId }: { workpanelId: string }) {
                                             </div>
                                          </TooltipProvider>
                                          {directMembers.length > 3 && (
-                                            <Badge variant="secondary" className="mr-2">
+                                            <Badge variant="secondary" className="mr-2 ml-1 h-6 w-6 justify-center p-0">
                                                 +{directMembers.length - 3}
                                             </Badge>
                                          )}
+                                        {canManageTeamRoom && (
+                                            <ShareTeamRoomDialog 
+                                                workpanelId={workpanelId} 
+                                                teamRoom={teamRoom} 
+                                                allUsers={allUsers} 
+                                                workpanelMembers={workpanel?.members || {}}
+                                                onUpdate={fetchAllUsers} 
+                                            />
+                                        )}
                                     </div>
-                                    {canManageTeamRoom && (
-                                        <ShareTeamRoomDialog 
-                                            workpanelId={workpanelId} 
-                                            teamRoom={teamRoom} 
-                                            allUsers={allUsers} 
-                                            workpanelMembers={workpanel?.members || {}}
-                                            onUpdate={fetchAllUsers} 
-                                        />
-                                    )}
                                 </div>
                             </div>
                             <AccordionContent className="pt-4 px-2">
